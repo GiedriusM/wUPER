@@ -130,7 +130,7 @@ ALIGN4 const uint8_t UPER_ConfigDescriptor[] = {
   CDC_CS_INTERFACE,                  /* bDescriptorType: CS_INTERFACE */
   CDC_CALL_MANAGEMENT,               /* bDescriptorSubtype: Call Management Func Desc */
   0x00,                              /* bmCapabilities: device handles call management */
-  0x00,                              /* bDataInterface: CDC data IF ID */
+  USB_CDC_SFP_DIF_NUM,               /* bDataInterface: CDC data IF ID */
   /*Abstract Control Management Functional Descriptor*/
   0x04,                              /* bFunctionLength */
   CDC_CS_INTERFACE,                  /* bDescriptorType: CS_INTERFACE */
