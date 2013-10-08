@@ -35,7 +35,6 @@
 #include "CDC/CDC.h"
 
 #include "WUPER/wuper.h"
-#include "WUPER/wuper_callbacks.h"
 
 #include "IAP.h"
 

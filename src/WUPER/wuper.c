@@ -84,7 +84,7 @@ static WUPER_Node WUPER_nodes[WUPER_MAX_NODE_COUNT];
 static uint8_t WUPER_nodeCount;
 
 /* SFP buffer variables */
-#define WUPER_SFP_RX_BUFFER_SIZE_N	7
+#define WUPER_SFP_RX_BUFFER_SIZE_N	8
 #define WUPER_SFP_RX_BUFFER_MASK		((1 << WUPER_SFP_RX_BUFFER_SIZE_N) - 1)
 static volatile uint8_t  WUPER_SFP_rxBuffer[1 << WUPER_SFP_RX_BUFFER_SIZE_N];
 
