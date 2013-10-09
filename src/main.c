@@ -46,7 +46,7 @@ SFPResult LedCallback(SFPFunction *msg) {
 
 struct {
 	uint32_t address;
-	Time_t startTime;
+	time_t startTime;
 	uint32_t timeout;
 	uint8_t size;
 } pingData;

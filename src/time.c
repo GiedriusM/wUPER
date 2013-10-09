@@ -75,7 +75,7 @@ void Time_init() {
 	NVIC_SetPriority(SysTick_IRQn, 0);
 }
 
-Time_t Time_getSystemTime() {
+time_t Time_getSystemTime() {
 	return time_systime;
 }
 
