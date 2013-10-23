@@ -285,9 +285,9 @@ ErrorCode_t CDC_Init(SFPStream *stream, uint32_t guid[4]) {
 	/* initialize call back structures */
 	memset((void*) &usb_param, 0, sizeof(USBD_API_INIT_PARAM_T));
 	usb_param.usb_reg_base = LPC_USB_BASE;
-	usb_param.mem_base = 0x10001000;
-	usb_param.mem_size = 0x1000;
-	usb_param.max_num_ep = 10;
+	usb_param.mem_base = 0x20004000;
+	usb_param.mem_size = 0x800;
+	usb_param.max_num_ep = 5;
 
 	/* Initialize Descriptor pointers */
 	memset((void*) &desc, 0, sizeof(USB_CORE_DESCS_T));

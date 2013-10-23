@@ -49,7 +49,11 @@
 
 #include <MemoryManager/MemoryManager.h>
 
+#include "power.h"
+
 #include "time.h"
+
+#include "WUPER/wuper.h"
 
 #include "WUPER/function_def.h"
 
@@ -63,5 +67,7 @@ SFPStream stream;
 SFPStream spirit_stream;
 
 uint32_t GUID[4];
+
+uint8_t isInPowerDown;
 
 #endif /* MAIN_H_ */

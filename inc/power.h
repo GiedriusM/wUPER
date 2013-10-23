@@ -1,5 +1,5 @@
 /**
- * @file	spirit1.h
+ * @file	power.h
  * @author  Giedrius Medzevicius <giedrius@8devices.com>
  *
  * @section LICENSE
@@ -30,23 +30,15 @@
  *
  */
 
-#ifndef SPIRIT1_H_
-#define SPIRIT1_H_
+#ifndef POWER_H_
+#define POWER_H_
 
 #include "main.h"
 
-#include "SPIRIT_Config.h"
+void Power_startWatchdog(uint32_t timeout);
+void Power_stopWatchdog(void);
 
-#define XTAL_FREQUENCY	52000000
-#define CLOCK_FREQUENCY	26000000
+void Power_enterPowerDown(void);
+void Power_exitPowerDown(void);
 
-void SPIRIT1_Init(void);
-
-void SPIRIT1_SPIConfig(uint32_t divider, uint8_t mode);
-uint8_t SPIRIT1_SPITrans(uint8_t data);
-void SPIRIT1_SPISlaveEnable(void);
-void SPIRIT1_SPISlaveDisable(void);
-
-void SPIRIT1_CalculateDatarateME(uint32_t datarate, uint8_t* dr_m, uint8_t* dr_e);
-
-#endif /* SPIRIT1_H_ */
+#endif /* POWER_H_ */

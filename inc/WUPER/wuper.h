@@ -34,13 +34,9 @@
 #define WUPER_H_
 
 #include "main.h"
-#include "SPIRIT1/spirit1.h"
-
-
 
 #define WUPER_PROTOCOL_VERSION		'0'
 #define WUPER_MAX_NODE_COUNT		16
-#define WUPER_RETRY_COUNT			1
 
 #define WUPER_PAYLOAD_OVERHEAD_SIZE		5
 
@@ -66,6 +62,8 @@ typedef struct {
 
 
 void WUPER_Init(SFPStream *stream, uint32_t guid[4]);
+void WUPER_Restart(void);
+void WUPER_Shutdown(void);
 
 uint32_t 	WUPER_GetDeviceAddress(void);
 void	 	WUPER_GetTrafficStatistics(WUPERTrafficStatistics *stats);
@@ -73,7 +71,8 @@ void	 	WUPER_GetTrafficStatistics(WUPERTrafficStatistics *stats);
 void 		WUPER_SetDestinationAddress(uint32_t addr);
 void		WUPER_SetNetworkID(uint8_t id);
 void		WUPER_SetAESKey(uint8_t key[16]);
-void		WUPER_SetRFParameters(uint32_t frequency, uint32_t datarate, uint8_t modulation, uint32_t fdev);
+void 		WUPER_SetRFParameters(uint32_t frequency, uint32_t datarate, uint8_t modulation, uint32_t fdev,
+		int8_t txPowerdBm, uint32_t sendRetryCount, uint32_t ackTimeout);
 
 WUPERResult WUPER_AddNode(uint32_t addr);
 WUPERResult WUPER_DeleteNode(uint32_t addr);
@@ -81,5 +80,6 @@ WUPERResult WUPER_ClearNodes(void);
 uint8_t		WUPER_ContainsNode(uint32_t addr);
 uint32_t	WUPER_GetNodeCount(void);
 uint32_t	WUPER_GetNodeAddress(uint32_t pos);
+void		WUPER_GetNodeInfo(uint32_t addr, uint16_t *inSignalQuality, uint16_t *outSignalQuality);
 
 #endif /* WUPER_H_ */

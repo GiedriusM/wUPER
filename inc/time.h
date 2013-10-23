@@ -38,12 +38,11 @@
 #define TIMER_STOP	0xFFFFFFFF
 #define TIMER_COUNT	16
 
-typedef uint32_t	time_t;
 typedef void (*TimerCallback)(void*);
 
 void Time_init(void);
 
-time_t Time_getSystemTime(void);
+uint32_t Time_getSystemTime(void);
 
 //void Time_setTimer1(uint32_t timeout, TimerCallback callback);
 void Time_addTimer(uint32_t timeout, TimerCallback callback, void *param);
