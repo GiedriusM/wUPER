@@ -177,16 +177,6 @@ SFPResult GetTrafficInfoCallback(SFPFunction *func) {
 	return SFP_OK;
 }
 
-SFPResult SetNetworkCallback(SFPFunction *func) {
-	if (SFPFunction_getArgumentCount(func) != 1) return SFP_ERR_ARG_COUNT;
-
-	if (SFPFunction_getArgumentType(func, 0) != SFP_ARG_INT) return SFP_ERR_ARG_TYPE;
-
-	WUPER_SetNetworkID(SFPFunction_getArgument_int32(func, 0));
-
-	return SFP_OK;
-}
-
 SFPResult SetAESKeyCallback(SFPFunction *func) {
 	if (SFPFunction_getArgumentCount(func) != 1) return SFP_ERR_ARG_COUNT;
 
@@ -203,7 +193,7 @@ SFPResult SetAESKeyCallback(SFPFunction *func) {
 }
 
 SFPResult SetRFParamsCallback(SFPFunction *func) {
-	if (SFPFunction_getArgumentCount(func) != 7) return SFP_ERR_ARG_COUNT;
+	if (SFPFunction_getArgumentCount(func) != 8) return SFP_ERR_ARG_COUNT;
 
 	if (SFPFunction_getArgumentType(func, 0) != SFP_ARG_INT
 			|| SFPFunction_getArgumentType(func, 1) != SFP_ARG_INT
@@ -211,19 +201,39 @@ SFPResult SetRFParamsCallback(SFPFunction *func) {
 			|| SFPFunction_getArgumentType(func, 3) != SFP_ARG_INT
 			|| SFPFunction_getArgumentType(func, 4) != SFP_ARG_INT
 			|| SFPFunction_getArgumentType(func, 5) != SFP_ARG_INT
-			|| SFPFunction_getArgumentType(func, 6) != SFP_ARG_INT)
+			|| SFPFunction_getArgumentType(func, 6) != SFP_ARG_INT
+			|| SFPFunction_getArgumentType(func, 7) != SFP_ARG_INT)
 		return SFP_ERR_ARG_TYPE;
 
-	uint32_t frequency = SFPFunction_getArgument_int32(func, 0);
-	uint32_t datarate = SFPFunction_getArgument_int32(func, 1);
-	uint8_t modulationFlags = SFPFunction_getArgument_int32(func, 2);
-	uint32_t fdev = SFPFunction_getArgument_int32(func, 3);
+	WUPERSettings settings = {
+			.frequency = SFPFunction_getArgument_int32(func, 0),
+			.datarate = SFPFunction_getArgument_int32(func, 1),
+			.modulation =  { SFPFunction_getArgument_int32(func, 2) },
+			.freqDev = SFPFunction_getArgument_int32(func, 3),
+			.txPowerdBm = SFPFunction_getArgument_int32(func, 4),
+			.networkID = SFPFunction_getArgument_int32(func, 5),
+			.sendRetryCount = SFPFunction_getArgument_int32(func, 6),
+			.ackWaitTimeout = SFPFunction_getArgument_int32(func, 7)
+	};
 
-	int8_t txPower = SFPFunction_getArgument_int32(func, 4);
-	uint32_t retryCount = SFPFunction_getArgument_int32(func, 5);
-	uint32_t ackTimeout = SFPFunction_getArgument_int32(func, 6);
+	/*WUPERSettings settings;
+	settings.frequency = SFPFunction_getArgument_int32(func, 0);
+	settings.datarate = SFPFunction_getArgument_int32(func, 1);
+	uint32_t mod = SFPFunction_getArgument_int32(func, 2);
+	settings.modulation.type = mod & 7;
+	settings.modulation.BT1 = (mod >> 3) & 1;
+	settings.modulation.whitening = (mod >> 6) & 1;
+	settings.modulation.fec = (mod >> 7) & 1;
+	settings.freqDev = SFPFunction_getArgument_int32(func, 3);
 
-	WUPER_SetRFParameters(frequency, datarate, modulationFlags, fdev, txPower, retryCount, ackTimeout);
+	settings.txPowerdBm = SFPFunction_getArgument_int32(func, 4);
+
+	settings.networkID = SFPFunction_getArgument_int32(func, 5);
+
+	settings.sendRetryCount = SFPFunction_getArgument_int32(func, 6);
+	settings.ackWaitTimeout = SFPFunction_getArgument_int32(func, 7);*/
+
+	WUPER_SetRFSettings(&settings);
 
 	return SFP_OK;
 }
@@ -401,6 +411,9 @@ int main(void) {
 	LPC_GPIO->DIR[0] |= BIT7;
 	LPC_GPIO->CLR[0] |= BIT7;
 
+//LPC_GPIO->DIR[1] |= BIT15;
+//LPC_GPIO->CLR[1] |= BIT15;
+
 	/* Load CDC and Spirit streams */
 	CDC_Init(&stream, GUID);
 	WUPER_Init(&spirit_stream, GUID);
@@ -412,7 +425,6 @@ int main(void) {
 	/* CDC SFP server initialization */
 	SFPServer_addFunctionHandler(cdcServer, WUPER_CDC_FNAME_GETDEVADDRESS,	WUPER_CDC_FID_GETDEVADDRESS,	GetDeviceAddrCallback);
 	SFPServer_addFunctionHandler(cdcServer, WUPER_CDC_FNAME_GETTRAFFICINFO,	WUPER_CDC_FID_GETTRAFFICINFO,	GetTrafficInfoCallback);
-	SFPServer_addFunctionHandler(cdcServer, WUPER_CDC_FNAME_SETNETWORK, WUPER_CDC_FID_SETNETWORK,	SetNetworkCallback);
 	SFPServer_addFunctionHandler(cdcServer, WUPER_CDC_FNAME_SETAESKEY,	WUPER_CDC_FID_SETAESKEY,	SetAESKeyCallback);
 	SFPServer_addFunctionHandler(cdcServer, WUPER_CDC_FNAME_SETRFPARAMS,WUPER_CDC_FID_SETRFPARAMS,	SetRFParamsCallback);
 	SFPServer_addFunctionHandler(cdcServer, WUPER_CDC_FNAME_PING,		WUPER_CDC_FID_PING,			PingSendCallback);

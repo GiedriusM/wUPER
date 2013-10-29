@@ -84,17 +84,14 @@ typedef struct {
 static WUPER_Node WUPER_nodes[WUPER_MAX_NODE_COUNT];
 static uint8_t WUPER_nodeCount;
 
-static uint32_t WUPER_packetSendRetryCount;
-static uint32_t WUPER_packetACKWaitTime;
 
 /* Spirit config variables */
-static SRadioInit WUPER_spiritRadioInit;
-static PktBasicInit WUPER_spiritBasicPacketInit;
-static PktBasicAddressesInit WUPER_spiritBasicPacketAddresses;
-static int8_t WUPER_spiritTXPower;
+static WUPERSettings WUPER_settings;
 static uint8_t WUPER_AESKey[16];
 static uint32_t WUPER_deviceAddress;
 static uint32_t WUPER_destinationAddress;
+static volatile uint8_t WUPER_csmaBackOffFlag;
+
 
 /* SFP buffer variables */
 #define WUPER_SFP_RX_BUFFER_SIZE_N	8
@@ -174,7 +171,12 @@ void FLEX_INT7_IRQHandler() {
 		WUPER_SFP_rxBufferWritePos = WUPER_SFP_rxBufferDataEndPos;
 	}
 
-	if (interrupts.IRQ_RX_DATA_DISC) { // RX packet discarded (filter)
+	if (interrupts.IRQ_MAX_BO_CCA_REACH) {
+		WUPER_csmaBackOffFlag = 1;
+	}
+
+	if (interrupts.IRQ_RX_DATA_DISC // RX packet discarded (filter)
+			|| (interrupts.IRQ_RX_DATA_READY && WUPER_txState == WUPER_TX_SENDING)) { // CSMA state
 		WUPER_SFP_rxBufferWritePos = WUPER_SFP_rxBufferEncryptedEndPos;
 		WUPER_SFP_rxBufferDiscardNextPacket = 0;
 		SpiritSpiCommandStrobes(COMMAND_FLUSHRXFIFO); // Clear RX FIFO
@@ -421,41 +423,17 @@ void WUPER_Init(SFPStream *stream, uint32_t guid[4]) {
 	WUPER_SFP_rxBufferEncryptedEndPos = 0;
 	WUPER_SFP_rxBufferDiscardNextPacket = 0;
 
-	WUPER_packetSendRetryCount = 2; // 1 first try + 2 retries = max 3 attempts
-	WUPER_packetACKWaitTime = 5000; // 5 seconds
-
-	//WUPER_InitVariables();
-
-	WUPER_spiritRadioInit.lFrequencyBase = 868000000;
-	WUPER_spiritRadioInit.nXtalOffsetPpm = 0;
-	WUPER_spiritRadioInit.lDatarate = 250;
-	WUPER_spiritRadioInit.xModulationSelect = FSK;
-	WUPER_spiritRadioInit.lFreqDev = 15000;
-	WUPER_spiritRadioInit.lBandwidth = 147000;
-	WUPER_spiritRadioInit.cChannelNumber = 0;
-	WUPER_spiritRadioInit.nChannelSpace = 300000;
-
-	WUPER_spiritBasicPacketInit.xPreambleLength = PKT_PREAMBLE_LENGTH_04BYTES;
-	WUPER_spiritBasicPacketInit.xSyncLength = PKT_SYNC_LENGTH_4BYTES;
-	WUPER_spiritBasicPacketInit.lSyncWords = ('C' << 24) | (('N' | 0x80) << 16) | ('Y' << 8) | ('S' | 0x80);
-	WUPER_spiritBasicPacketInit.xFixVarLength = PKT_LENGTH_VAR;
-	WUPER_spiritBasicPacketInit.cPktLengthWidth = 8;
-	WUPER_spiritBasicPacketInit.xCrcMode = PKT_CRC_MODE_16BITS_1;
-	WUPER_spiritBasicPacketInit.xControlLength = PKT_CONTROL_LENGTH_4BYTES;
-	WUPER_spiritBasicPacketInit.xAddressField = S_ENABLE;
-	WUPER_spiritBasicPacketInit.xFec = S_DISABLE;
-	WUPER_spiritBasicPacketInit.xDataWhitening = S_DISABLE;
-
-	// XXX: BUG! Device and broadcast address filter masks
-	// are interchanged (or their addresses)
-	WUPER_spiritBasicPacketAddresses.xFilterOnMyAddress = S_DISABLE;
-	WUPER_spiritBasicPacketAddresses.cMyAddress = 3;
-	WUPER_spiritBasicPacketAddresses.xFilterOnMulticastAddress = S_DISABLE;
-	WUPER_spiritBasicPacketAddresses.cMulticastAddress = 0;
-	WUPER_spiritBasicPacketAddresses.xFilterOnBroadcastAddress = S_ENABLE;
-	WUPER_spiritBasicPacketAddresses.cBroadcastAddress = 0;
-
-	WUPER_spiritTXPower = 11; // 11dBm
+	WUPER_settings.frequency = 868000000;
+	WUPER_settings.datarate = 500;
+	WUPER_settings.modulation.type = WUPER_MOD_FSK;
+	WUPER_settings.modulation.BT1 = 0;
+	WUPER_settings.modulation.whitening = 0;
+	WUPER_settings.modulation.fec = 0;
+	WUPER_settings.freqDev = 15000;
+	WUPER_settings.txPowerdBm = 11;
+	WUPER_settings.networkID = 0;
+	WUPER_settings.sendRetryCount = 2;
+	WUPER_settings.ackWaitTimeout = 5000;
 
 	WUPER_InitPins();
 
@@ -484,13 +462,7 @@ void WUPER_Restart(void) {
 	SpiritRadioSetXtalFrequency(XTAL_FREQUENCY);
 	SpiritGeneralSetSpiritVersion(SPIRIT_VERSION_3_0);
 
-	SpiritRadioInit(&WUPER_spiritRadioInit); // XXX: WCP value is incorrect (according to datasheet)
-	SpiritRadioSetPALeveldBm(0, WUPER_spiritTXPower);
-	SpiritRadioSetPALevelMaxIndex(0);
-
-	SpiritPktBasicInit(&WUPER_spiritBasicPacketInit);
-	SpiritPktBasicAddressesInit(&WUPER_spiritBasicPacketAddresses);
-	SpiritPktCommonSetDestinationAddress(WUPER_spiritBasicPacketAddresses.cMyAddress); // Address (network ID)
+	WUPER_SetRFSettings(&WUPER_settings);
 
 	SpiritPktCommonSetTransmittedCtrlField(('0' << 24) | ('P' << 16) | ('F' << 8) | 'S');
 	SpiritPktCommonSetCtrlReference(('0' << 24) | ('P' << 16) | ('F' << 8) | 'S');
@@ -501,8 +473,20 @@ void WUPER_Restart(void) {
 	SpiritRadioPersistenRx(S_ENABLE);
 
 	SpiritAesMode(S_ENABLE);
-
 	SpiritAesWriteKey(WUPER_AESKey);
+
+	CsmaInit csmaInit = {
+		.xCsmaPersistentMode = S_DISABLE,
+		.xMultiplierTbit = TBIT_TIME_128,
+		.xCcaLength = TCCA_TIME_4,
+
+		.cMaxNb = 7,
+		.cBuPrescaler = 35, // 34,7kHz/35 -> BU about 1ms
+	};
+	SpiritCsmaInit(&csmaInit);
+	SpiritCsmaSeedReloadMode(S_DISABLE);
+	SpiritQiSetRssiThreshold(150);
+	SpiritQiSetCsMode(CS_MODE_STATIC_3DB);
 
 	SpiritIrqs irqInit = {0};
 	irqInit.IRQ_RX_DATA_READY = S_SET;
@@ -510,6 +494,7 @@ void WUPER_Restart(void) {
 	irqInit.IRQ_RX_FIFO_ERROR = S_SET;
 	irqInit.IRQ_RX_FIFO_ALMOST_FULL = S_SET;
 	irqInit.IRQ_AES_END = S_SET;
+	irqInit.IRQ_MAX_BO_CCA_REACH = S_SET;
 
 	SpiritIrqInit(&irqInit);
 	SpiritIrqGetStatus(&irqInit); // Reset IRQ flags
@@ -718,7 +703,7 @@ void WUPER_Stream_writePacket(uint8_t *data, uint32_t len) {
 
 	WUPER_txState = WUPER_TX_SENDING;
 
-	uint8_t retriesLeft = WUPER_packetSendRetryCount;
+	uint8_t retriesLeft = WUPER_settings.sendRetryCount;
 	do {
 		do {
 			SpiritRefreshStatus();
@@ -727,12 +712,6 @@ void WUPER_Stream_writePacket(uint8_t *data, uint32_t len) {
 		} while (g_xStatus.MC_STATE != MC_STATE_READY);
 
 		SpiritSpiCommandStrobes(COMMAND_FLUSHTXFIFO); // Clear TX FIFO
-
-		/* Enter TX state */
-		SpiritSpiCommandStrobes(COMMAND_LOCKTX); // Lock TX
-		do {
-			SpiritRefreshStatus();
-		} while (g_xStatus.MC_STATE != MC_STATE_LOCK);
 
 		SpiritPktBasicSetPayloadLength((len+16+15) & 0xFFF0);
 
@@ -761,6 +740,11 @@ void WUPER_Stream_writePacket(uint8_t *data, uint32_t len) {
 		SpiritSpiCommandStrobes(COMMAND_AES_ENC);
 		while (WUPER_AESState != WUPER_AES_INACTIVE); // Wait for data to be encrypted
 		SpiritAesReadDataOut(tmpBuf, 16);
+
+
+		// Enable CSMA
+		WUPER_csmaBackOffFlag = 0;
+		SpiritCsma(S_ENABLE);
 
 		// Send header
 		SpiritSpiWriteLinearFifo(16, tmpBuf); // Write header to TX FIFO
@@ -794,10 +778,27 @@ void WUPER_Stream_writePacket(uint8_t *data, uint32_t len) {
 			SpiritSpiWriteLinearFifo(16, tmpBuf);
 		}
 
+/*uint8_t nState = 1;
+SpiritState states[30];
+uint32_t times[30];
+states[0] = g_xStatus.MC_STATE;
+times[0] = Time_getSystemTime();
+
+		do {
+			SpiritRefreshStatus();
+
+			if (nState < 30 && states[nState-1] != g_xStatus.MC_STATE) {
+				times[nState] = Time_getSystemTime();
+				states[nState++] = g_xStatus.MC_STATE;
+			}
+		} while (g_xStatus.MC_STATE != MC_STATE_READY);
+SpiritCsma(S_DISABLE);*/
+
 		// Wait until data is sent
 		do {
 			SpiritRefreshStatus();
 		} while (g_xStatus.MC_STATE != MC_STATE_READY);
+		SpiritCsma(S_DISABLE);
 
 
 		// Go to RX state
@@ -814,7 +815,7 @@ void WUPER_Stream_writePacket(uint8_t *data, uint32_t len) {
 
 		// Wait for ACK with a timeout
 		WUPER_txState = WUPER_TX_WAITING_ACK;
-		Time_setCountdown(WUPER_packetACKWaitTime);
+		Time_setCountdown(WUPER_settings.ackWaitTimeout);
 		while (Time_isCountdownRunning()) {
 			if (WUPER_txState == WUPER_TX_RECEIVED_ACK) break;
 		}
@@ -840,6 +841,12 @@ void WUPER_Stream_write(uint8_t *buf, uint32_t len) {
 }
 
 void WUPER_SendResponse(uint8_t data[16]) {
+
+	if (WUPER_txState == WUPER_TX_SENDING) { // Just in case some bug slipped through
+		return;
+	}
+
+	uint32_t tmpState = WUPER_txState;
 
 	WUPER_txState = WUPER_TX_SENDING;
 
@@ -868,7 +875,7 @@ void WUPER_SendResponse(uint8_t data[16]) {
 		SpiritRefreshStatus();
 	} while (g_xStatus.MC_STATE != MC_STATE_READY);
 
-	WUPER_txState = WUPER_TX_INACTIVE;
+	WUPER_txState = tmpState;
 
 	// Go to RX state
 	SpiritSpiCommandStrobes(COMMAND_LOCKRX); // Lock RX
@@ -994,14 +1001,6 @@ void WUPER_SetDestinationAddress(uint32_t addr) {
 	WUPER_destinationAddress = addr;
 }
 
-void WUPER_SetNetworkID(uint8_t id) {
-	WUPER_spiritBasicPacketAddresses.xFilterOnMyAddress = id;
-
-	// wUPER network ID is really the address field of the Basic packet
-	SpiritPktCommonSetDestinationAddress(id); // Set TX destination address
-	SpiritSpiWriteRegisters(PCKT_FLT_GOALS_TX_ADDR_BASE, 1, &id); // Set RX destination address
-}
-
 void WUPER_SetAESKey(uint8_t key[16]) {
 	uint8_t i;
 	for (i=0; i<16; i++)
@@ -1010,43 +1009,64 @@ void WUPER_SetAESKey(uint8_t key[16]) {
 	SpiritAesWriteKey(WUPER_AESKey);
 }
 
-void WUPER_SetRFParameters(uint32_t frequency, uint32_t datarate, uint8_t modulation, uint32_t fdev, int8_t txPowerdBm, uint32_t sendRetryCount, uint32_t ackTimeout) {
-	SpiritSpiCommandStrobes(COMMAND_SABORT);
+void WUPER_SetRFSettings(WUPERSettings *settings) {
+	WUPER_settings = *settings;
 
-	//SRadioInit spiritRadio;
-
-	WUPER_spiritRadioInit.lFrequencyBase = frequency;
-
-	WUPER_spiritRadioInit.lDatarate = datarate;
-
-	if ((modulation & 0x7) == 1) { // GFSK modulation
-		WUPER_spiritRadioInit.xModulationSelect = (modulation & BIT3 ? GFSK_BT1 : GFSK_BT05);
-	} else {
-		WUPER_spiritRadioInit.xModulationSelect = FSK;
+	SpiritRefreshStatus();
+	SpiritStatus spiritStatus = g_xStatus;
+	if (spiritStatus.MC_STATE != MC_STATE_READY) {
+		SpiritSpiCommandStrobes(COMMAND_SABORT);
 	}
 
-	WUPER_spiritRadioInit.lFreqDev = fdev;
+	SRadioInit spiritRadio;
+	PktBasicInit spiritBasicPacketInit;
+	PktBasicAddressesInit spiritBasicPacketAddresses;
 
-	//spiritRadio.lBandwidth = 150000;
+	spiritRadio.lFrequencyBase = WUPER_settings.frequency;
+	spiritRadio.lDatarate = WUPER_settings.datarate;
+	if (WUPER_settings.modulation.type == WUPER_MOD_GFSK) { // GFSK modulation
+		spiritRadio.xModulationSelect = (WUPER_settings.modulation.BT1 ? GFSK_BT1 : GFSK_BT05);
+	} else {
+		spiritRadio.xModulationSelect = FSK;
+	}
+	spiritRadio.lFreqDev = WUPER_settings.freqDev;
+	spiritRadio.lBandwidth = 150000;
+	spiritRadio.cChannelNumber = 0;
+	spiritRadio.nChannelSpace = 300000;
+	spiritRadio.nXtalOffsetPpm = 0; // TODO: calculate xtal offset
 
-	//spiritRadio.cChannelNumber = 0;
-	//spiritRadio.nChannelSpace = 300000;
+	spiritBasicPacketInit.xPreambleLength = PKT_PREAMBLE_LENGTH_04BYTES;
+	spiritBasicPacketInit.xSyncLength = PKT_SYNC_LENGTH_4BYTES;
+	spiritBasicPacketInit.lSyncWords = ('C' << 24) | (('N' | 0x80) << 16) | ('Y' << 8) | ('S' | 0x80);
+	spiritBasicPacketInit.xFixVarLength = PKT_LENGTH_VAR;
+	spiritBasicPacketInit.cPktLengthWidth = 8;
+	spiritBasicPacketInit.xCrcMode = PKT_CRC_MODE_16BITS_1;
+	spiritBasicPacketInit.xControlLength = PKT_CONTROL_LENGTH_4BYTES;
+	spiritBasicPacketInit.xAddressField = S_ENABLE;
+	spiritBasicPacketInit.xFec = (WUPER_settings.modulation.fec ? S_ENABLE : S_DISABLE);
+	spiritBasicPacketInit.xDataWhitening = (WUPER_settings.modulation.whitening ? S_ENABLE : S_DISABLE);
 
-	WUPER_spiritBasicPacketInit.xDataWhitening = modulation & BIT6 ? S_ENABLE : S_DISABLE;
-	WUPER_spiritBasicPacketInit.xFec = modulation & BIT7 ? S_ENABLE : S_DISABLE;
+	// XXX: BUG! Device and broadcast address filter masks
+	// are interchanged (or their addresses)
+	spiritBasicPacketAddresses.xFilterOnMyAddress = S_DISABLE;
+	spiritBasicPacketAddresses.cMyAddress = WUPER_settings.networkID;
+	spiritBasicPacketAddresses.xFilterOnMulticastAddress = S_DISABLE;
+	spiritBasicPacketAddresses.cMulticastAddress = 0;
+	spiritBasicPacketAddresses.xFilterOnBroadcastAddress = S_ENABLE;
+	spiritBasicPacketAddresses.cBroadcastAddress = 0;
 
-	WUPER_spiritTXPower = txPowerdBm;
 
-	WUPER_packetSendRetryCount = sendRetryCount;
-	WUPER_packetACKWaitTime = ackTimeout;
+	// Send Spirit configuration
+	SpiritRadioInit(&spiritRadio); // XXX: WCP value is incorrect (according to datasheet)
+	SpiritRadioSetPALeveldBm(0, WUPER_settings.txPowerdBm);
+	SpiritRadioSetPALevelMaxIndex(0);
 
+	SpiritPktBasicInit(&spiritBasicPacketInit);
+	SpiritPktBasicAddressesInit(&spiritBasicPacketAddresses);
+	SpiritPktCommonSetDestinationAddress(WUPER_settings.networkID); // Address (network ID)
 
-	SpiritRadioSetPALeveldBm(0, txPowerdBm);
+	// Return to RX state if needed
+	if (spiritStatus.MC_STATE == MC_STATE_RX)
+		SpiritSpiCommandStrobes(COMMAND_RX);
 
-	SpiritPktCommonWhitening(modulation & BIT6 ? S_ENABLE : S_DISABLE);
-	SpiritPktCommonFec(modulation & BIT7 ? S_ENABLE : S_DISABLE);
-
-	SpiritRadioInit(&WUPER_spiritRadioInit);
-
-	SpiritSpiCommandStrobes(COMMAND_RX);
 }

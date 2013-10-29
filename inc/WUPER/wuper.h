@@ -60,6 +60,26 @@ typedef struct {
 	uint32_t packetSeqSet;
 } WUPERTrafficStatistics;
 
+typedef struct {
+	uint32_t frequency;
+	uint32_t datarate;
+	struct {
+		enum { WUPER_MOD_FSK=0, WUPER_MOD_GFSK=1 } type:3;
+		uint8_t BT1:1;
+		uint8_t reserved:2;
+		uint8_t whitening:1;
+		uint8_t fec:1;
+	} modulation;
+	uint32_t freqDev;
+
+	int8_t txPowerdBm;
+
+	uint8_t networkID;
+
+	uint32_t sendRetryCount;
+	uint32_t ackWaitTimeout;
+} WUPERSettings;
+
 
 void WUPER_Init(SFPStream *stream, uint32_t guid[4]);
 void WUPER_Restart(void);
@@ -69,10 +89,8 @@ uint32_t 	WUPER_GetDeviceAddress(void);
 void	 	WUPER_GetTrafficStatistics(WUPERTrafficStatistics *stats);
 
 void 		WUPER_SetDestinationAddress(uint32_t addr);
-void		WUPER_SetNetworkID(uint8_t id);
 void		WUPER_SetAESKey(uint8_t key[16]);
-void 		WUPER_SetRFParameters(uint32_t frequency, uint32_t datarate, uint8_t modulation, uint32_t fdev,
-		int8_t txPowerdBm, uint32_t sendRetryCount, uint32_t ackTimeout);
+void 		WUPER_SetRFSettings(WUPERSettings *settings);
 
 WUPERResult WUPER_AddNode(uint32_t addr);
 WUPERResult WUPER_DeleteNode(uint32_t addr);

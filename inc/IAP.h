@@ -78,6 +78,40 @@ uint32_t IAP_GetBootCodeVersion(void) {
 	return result[1];
 }
 
+uint8_t IAP_WriteEEPROM(uint32_t address, uint8_t *data, uint32_t length) {
+	uint32_t command[5];
+	command[0] = 61;
+	command[1] = address;
+	command[2] = (uint32_t)data;
+	command[3] = length;
+	command[4] = 48000;
+
+	uint32_t result;
+	iap_entry(command, &result);
+
+	if (result == 0) // Sucesss
+		return 1;
+
+	return 0;
+}
+
+uint8_t IAP_ReadEEPROM(uint32_t address, uint8_t *data, uint32_t length) {
+	uint32_t command[5];
+	command[0] = 62;
+	command[1] = address;
+	command[2] = (uint32_t)data;
+	command[3] = length;
+	command[4] = 48000;
+
+	uint32_t result;
+	iap_entry(command, &result);
+
+	if (result == 0) // Sucesss
+		return 1;
+
+	return 0;
+}
+
 
 
 #endif /* IAP_H_ */
