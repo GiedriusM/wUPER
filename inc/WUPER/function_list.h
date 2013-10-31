@@ -1,5 +1,5 @@
 /**
- * @file	main.h
+ * @file	function_list.h
  * @author  Giedrius Medzevicius <giedrius@8devices.com>
  *
  * @section LICENSE
@@ -30,68 +30,47 @@
  *
  */
 
-#ifndef MAIN_H_
-#define MAIN_H_
+#ifndef FUNCTION_LIST_H_
+#define FUNCTION_LIST_H_
 
-#define WUPER_DEVICE_TYPE		'w'
-#define WUPER_FW_VERSION_MAJOR	0
-#define WUPER_FW_VERSION_MINOR	0
-#define WUPER_FIRMWARE_VERSION		((WUPER_DEVICE_TYPE << 24) | (WUPER_FW_VERSION_MAJOR << 16) | WUPER_FW_VERSION_MINOR)
+#include "main.h"
 
+struct {
+	uint32_t address;
+	uint32_t startTime;
+	uint32_t timeout;
+	uint8_t size;
+} pingData;
 
-#include "stdlib.h"
+SFPResult PingSendCallback(SFPFunction *func);
 
-#include "LPC11Uxx.h"
+SFPResult PingReceiveCallback(SFPFunction *func);
 
-#include "lpc_def.h"
+SFPResult PongReceiveCallback(SFPFunction *func);
 
-#include "IAP.h"
+SFPResult GetDeviceAddrCallback(SFPFunction *func);
 
-#include <MemoryManager/MemoryManager.h>
+SFPResult GetTrafficInfoCallback(SFPFunction *func);
 
-#include <SFP/SFP.h>
+SFPResult SetAESKeyCallback(SFPFunction *func);
 
-#include "power.h"
+SFPResult SetRFParamsCallback(SFPFunction *func);
 
-#include "time.h"
+SFPResult CDCDefaultCallback(SFPFunction *func);
 
-#include "WUPER/wuper.h"
-#include "WUPER/function_def.h"
-#include "WUPER/function_list.h"
+SFPResult SpiritDefaultCallback(SFPFunction *func);
 
-#include "Modules/LPC_ADC.h"
-#include "Modules/LPC_GPIO.h"
-#include "Modules/LPC_I2C.h"
-#include "Modules/LPC_PWM.h"
-#include "Modules/LPC_SPI.h"
+SFPResult AddNodeCallback(SFPFunction *func);
+SFPResult DelNodeCallback(SFPFunction *func);
+SFPResult ClearNodesCallback(SFPFunction *func);
+SFPResult GetNodesCallback(SFPFunction *func);
+SFPResult GetNodeInfoCallback(SFPFunction *func);
 
-SFPStream stream;
-SFPStream spirit_stream;
+SFPResult SaveSettingsCallback(SFPFunction *func);
+SFPResult EnterPowerSaveCallback(SFPFunction *func);
 
-uint32_t GUID[4];
+SFPResult lpc_system_getDeviceInfo(SFPFunction *msg);
 
-#ifdef WUPER_NODE
+SFPResult SleepCallback(SFPFunction *func);
 
-enum {
-	SYSTEM_MODE_ACTIVE,
-	SYSTEM_MODE_POWER_SAVE,
-	SYSTEM_MODE_POWER_DOWN
-} System_mode;
-
-#define SYSTEM_INTERRUPT_RESET		1
-#define SYSTEM_INTERRUPT_WAKEUP		5
-#define SYSTEM_INTERRUPT_GPIO		7
-
-void System_sendInterrupt(uint8_t interruptType, uint32_t param1, uint32_t param2);
-
-void System_resetPowerSaveTimeout(void);
-void System_enterPowerDown(uint32_t timeout);
-
-#endif
-
-uint8_t System_loadWuperSettings(void);
-uint8_t System_saveWuperSettings(void);
-
-
-
-#endif /* MAIN_H_ */
+#endif /* FUNCTION_LIST_H_ */

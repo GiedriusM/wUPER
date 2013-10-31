@@ -358,7 +358,8 @@ static void GPIO_InterruptHandler(uint8_t intID) {
 		}
 	}
 
-	GPIO_SEND_INT(intID, interruptEvent);
+	System_sendInterrupt(SYSTEM_INTERRUPT_GPIO, intID, interruptEvent);
+	//GPIO_SEND_INT(intID, interruptEvent);
 }
 
 void GPIO_handleInterrupts(void) {

@@ -38,10 +38,6 @@ void WDT_IRQHandler(void) {
 	LPC_WWDT->MOD &= ~(1<<3);
 }
 
-void USBWakeup_IRQHandler(void) {
-
-}
-
 void Power_startWatchdog(uint32_t timeout) {
 	if (timeout > 6710)
 		timeout = 6710;
@@ -59,6 +55,7 @@ void Power_startWatchdog(uint32_t timeout) {
 	LPC_WWDT->MOD = 1; // Enable watchdog
 	LPC_WWDT->WARNINT = 0; // Interrupt at watchdog reset
 	LPC_WWDT->FEED = 0xAA; LPC_WWDT->FEED = 0x55; // Reset watchdog
+
 	NVIC_EnableIRQ(WDT_IRQn); // Enable watchdog interrupt
 }
 

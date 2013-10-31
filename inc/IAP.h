@@ -33,85 +33,18 @@
 #ifndef IAP_H_
 #define IAP_H_
 
+#include "main.h"
+
 #define IAP_ADDRESS 0x1FFF1FF1
 
+void IAP_GetSerialNumber(uint32_t guid[4]);
 
-void iap_entry(uint32_t param_tab[], uint32_t result_tab[]) {
-	void (*iap)(uint32_t[], uint32_t[]);
-	iap = (void (*)(uint32_t [], uint32_t[])) IAP_ADDRESS;
-	iap(param_tab, result_tab);
-}
+uint32_t IAP_GetPartNumber(void);
 
-void IAP_GetSerialNumber(uint32_t guid[4]) {
-	uint32_t command = 58;
-	uint32_t result[5];
+uint32_t IAP_GetBootCodeVersion(void);
 
-	do {
-		iap_entry(&command, result);
-	} while (result[0] != 0);
+uint8_t IAP_WriteEEPROM(uint32_t address, uint8_t *data, uint32_t length);
 
-	guid[0] = result[1];
-	guid[1] = result[2];
-	guid[2] = result[3];
-	guid[3] = result[4];
-}
-
-uint32_t IAP_GetPartNumber(void) {
-	uint32_t command = 54;
-	uint32_t result[2];
-
-	do {
-		iap_entry(&command, result);
-	} while (result[0] != 0);
-
-	return result[1];
-}
-
-uint32_t IAP_GetBootCodeVersion(void) {
-	uint32_t command = 55;
-	uint32_t result[2];
-
-	do {
-		iap_entry(&command, result);
-	} while (result[0] != 0);
-
-	return result[1];
-}
-
-uint8_t IAP_WriteEEPROM(uint32_t address, uint8_t *data, uint32_t length) {
-	uint32_t command[5];
-	command[0] = 61;
-	command[1] = address;
-	command[2] = (uint32_t)data;
-	command[3] = length;
-	command[4] = 48000;
-
-	uint32_t result;
-	iap_entry(command, &result);
-
-	if (result == 0) // Sucesss
-		return 1;
-
-	return 0;
-}
-
-uint8_t IAP_ReadEEPROM(uint32_t address, uint8_t *data, uint32_t length) {
-	uint32_t command[5];
-	command[0] = 62;
-	command[1] = address;
-	command[2] = (uint32_t)data;
-	command[3] = length;
-	command[4] = 48000;
-
-	uint32_t result;
-	iap_entry(command, &result);
-
-	if (result == 0) // Sucesss
-		return 1;
-
-	return 0;
-}
-
-
+uint8_t IAP_ReadEEPROM(uint32_t address, uint8_t *data, uint32_t length);
 
 #endif /* IAP_H_ */

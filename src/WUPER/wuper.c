@@ -87,7 +87,6 @@ static uint8_t WUPER_nodeCount;
 
 /* Spirit config variables */
 static WUPERSettings WUPER_settings;
-static uint8_t WUPER_AESKey[16];
 static uint32_t WUPER_deviceAddress;
 static uint32_t WUPER_destinationAddress;
 static volatile uint8_t WUPER_csmaBackOffFlag;
@@ -473,7 +472,7 @@ void WUPER_Restart(void) {
 	SpiritRadioPersistenRx(S_ENABLE);
 
 	SpiritAesMode(S_ENABLE);
-	SpiritAesWriteKey(WUPER_AESKey);
+	SpiritAesWriteKey(WUPER_settings.aesKey);
 
 	CsmaInit csmaInit = {
 		.xCsmaPersistentMode = S_DISABLE,
@@ -778,22 +777,6 @@ void WUPER_Stream_writePacket(uint8_t *data, uint32_t len) {
 			SpiritSpiWriteLinearFifo(16, tmpBuf);
 		}
 
-/*uint8_t nState = 1;
-SpiritState states[30];
-uint32_t times[30];
-states[0] = g_xStatus.MC_STATE;
-times[0] = Time_getSystemTime();
-
-		do {
-			SpiritRefreshStatus();
-
-			if (nState < 30 && states[nState-1] != g_xStatus.MC_STATE) {
-				times[nState] = Time_getSystemTime();
-				states[nState++] = g_xStatus.MC_STATE;
-			}
-		} while (g_xStatus.MC_STATE != MC_STATE_READY);
-SpiritCsma(S_DISABLE);*/
-
 		// Wait until data is sent
 		do {
 			SpiritRefreshStatus();
@@ -1004,9 +987,9 @@ void WUPER_SetDestinationAddress(uint32_t addr) {
 void WUPER_SetAESKey(uint8_t key[16]) {
 	uint8_t i;
 	for (i=0; i<16; i++)
-		WUPER_AESKey[i] = key[i];
+		WUPER_settings.aesKey[i] = key[i];
 
-	SpiritAesWriteKey(WUPER_AESKey);
+	SpiritAesWriteKey(WUPER_settings.aesKey);
 }
 
 void WUPER_SetRFSettings(WUPERSettings *settings) {
@@ -1069,4 +1052,8 @@ void WUPER_SetRFSettings(WUPERSettings *settings) {
 	if (spiritStatus.MC_STATE == MC_STATE_RX)
 		SpiritSpiCommandStrobes(COMMAND_RX);
 
+}
+
+void WUPER_GetRFSettings(WUPERSettings *settings) {
+	*settings = WUPER_settings;
 }

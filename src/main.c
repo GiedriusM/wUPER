@@ -34,354 +34,18 @@
 
 #include "CDC/CDC.h"
 
-#include "WUPER/wuper.h"
+#define EEPROM_WUPER_SETTINGS	0x0
+#define EEPROM_WUPER_NODES		0x100
 
-#include "IAP.h"
+#define EEPROM_HEADER_SETTINGS	0x5A
+#define EEPROM_HEADER_NODES		0xA5
+
+static volatile uint32_t System_powerSaveStart;
+static uint32_t System_powerSaveTimeout;
+static uint32_t System_powerDownTimeout;
 
 SFPResult LedCallback(SFPFunction *msg) {
 	LPC_GPIO->NOT[0] |= BIT7;
-
-	return SFP_OK;
-}
-
-struct {
-	uint32_t address;
-	uint32_t startTime;
-	uint32_t timeout;
-	uint8_t size;
-} pingData;
-
-SFPResult PingSendCallback(SFPFunction *func) {
-	if (SFPFunction_getArgumentCount(func) != 1) return SFP_ERR_ARG_COUNT;
-
-	if (SFPFunction_getArgumentType(func, 0) != SFP_ARG_INT) return SFP_ERR_ARG_TYPE;
-
-	uint32_t addr = SFPFunction_getArgument_int32(func, 0);
-
-	pingData.address = addr;
-	pingData.startTime = Time_getSystemTime();
-	pingData.timeout = 10000; // 10s timeout
-	pingData.size = 0;
-	LedCallback(NULL);
-
-	SFPFunction *outFunc = SFPFunction_new();
-	if (outFunc == NULL) return SFP_ERR_ALLOC_FAILED;
-
-	WUPER_SetDestinationAddress(addr);
-
-	SFPFunction_setType(outFunc, SFP_FUNC_TYPE_BIN);
-	SFPFunction_setID(outFunc, WUPER_RF_FID_PING);
-	SFPFunction_addArgument_int32(outFunc, WUPER_GetDeviceAddress());
-	SFPFunction_addArgument_barray(outFunc, NULL, pingData.size);
-	SFPFunction_send(outFunc, &spirit_stream);
-	SFPFunction_delete(outFunc);
-
-	return SFP_OK;
-}
-
-SFPResult PingReceiveCallback(SFPFunction *func) {
-	if (SFPFunction_getArgumentCount(func) != 2) return SFP_ERR_ARG_COUNT;
-
-	if (SFPFunction_getArgumentType(func, 0) != SFP_ARG_INT &&
-			SFPFunction_getArgumentType(func, 0) != SFP_ARG_BYTE_ARRAY) return SFP_ERR_ARG_TYPE;
-
-	uint32_t addr = SFPFunction_getArgument_int32(func, 0);
-	uint32_t size = 0;
-	uint8_t *data = SFPFunction_getArgument_barray(func, 1, &size);
-
-	SFPFunction *outFunc = SFPFunction_new();
-
-	if (outFunc == NULL) return SFP_ERR_ALLOC_FAILED;
-
-	WUPER_SetDestinationAddress(addr);
-
-	SFPFunction_setType(outFunc, SFP_FUNC_TYPE_BIN);
-	SFPFunction_setID(outFunc, WUPER_RF_FID_PONG);
-	SFPFunction_addArgument_int32(outFunc, WUPER_GetDeviceAddress());
-	SFPFunction_addArgument_barray(outFunc, data, size);
-	SFPFunction_send(outFunc, &spirit_stream);
-	SFPFunction_delete(outFunc);
-
-	return SFP_OK;
-}
-
-SFPResult PongReceiveCallback(SFPFunction *func) {
-	if (SFPFunction_getArgumentCount(func) != 2) return SFP_ERR_ARG_COUNT;
-
-	if (SFPFunction_getArgumentType(func, 0) != SFP_ARG_INT &&
-			SFPFunction_getArgumentType(func, 0) != SFP_ARG_BYTE_ARRAY) return SFP_ERR_ARG_TYPE;
-
-	uint32_t deltaTime = Time_getSystemTime() - pingData.startTime;
-	if (deltaTime > pingData.timeout)
-		return SFP_OK;
-
-	uint32_t addr = SFPFunction_getArgument_int32(func, 0);
-	uint32_t size = 0;
-	SFPFunction_getArgument_barray(func, 1, &size);
-
-	if (addr != pingData.address || size != pingData.size)
-		return SFP_OK;
-
-	SFPFunction *outFunc = SFPFunction_new();
-
-	if (outFunc == NULL) return SFP_ERR_ALLOC_FAILED;
-
-	SFPFunction_setType(outFunc, SFP_FUNC_TYPE_TEXT);
-	SFPFunction_setName(outFunc, WUPER_CDC_FNAME_PONG);
-	SFPFunction_setID(outFunc, WUPER_CDC_FID_PONG);
-	SFPFunction_addArgument_int32(outFunc, addr);
-	SFPFunction_addArgument_int32(outFunc, deltaTime);
-	SFPFunction_send(outFunc, &stream);
-	SFPFunction_delete(outFunc);
-
-	return SFP_OK;
-}
-
-SFPResult GetDeviceAddrCallback(SFPFunction *func) {
-	if (SFPFunction_getArgumentCount(func) != 0) return SFP_ERR_ARG_COUNT;
-
-	SFPFunction *outFunc = SFPFunction_new();
-
-	if (outFunc == NULL) return SFP_ERR_ALLOC_FAILED;
-
-	SFPFunction_setType(outFunc, SFPFunction_getType(func));
-	SFPFunction_setName(outFunc, WUPER_CDC_FNAME_GETDEVINFO);
-	SFPFunction_setID(outFunc, WUPER_CDC_FID_GETDEVINFO);
-	SFPFunction_addArgument_int32(outFunc, WUPER_GetDeviceAddress());
-	SFPFunction_send(outFunc, &stream);
-	SFPFunction_delete(outFunc);
-
-	return SFP_OK;
-}
-
-SFPResult GetTrafficInfoCallback(SFPFunction *func) {
-	if (SFPFunction_getArgumentCount(func) != 0) return SFP_ERR_ARG_COUNT;
-
-	SFPFunction *outFunc = SFPFunction_new();
-
-	if (outFunc == NULL) return SFP_ERR_ALLOC_FAILED;
-
-	WUPERTrafficStatistics stats;
-	WUPER_GetTrafficStatistics(&stats);
-
-	SFPFunction_setType(outFunc, SFPFunction_getType(func));
-	SFPFunction_setName(outFunc, WUPER_CDC_FNAME_GETTRAFFICINFO);
-	SFPFunction_setID(outFunc, WUPER_CDC_FID_GETTRAFFICINFO);
-	SFPFunction_addArgument_int32(outFunc, stats.packetSendTotal);
-	SFPFunction_addArgument_int32(outFunc, stats.packetSendSuccess);
-	SFPFunction_addArgument_int32(outFunc, stats.packetSendRetry);
-	SFPFunction_addArgument_int32(outFunc, stats.packetSeqSet);
-	SFPFunction_send(outFunc, &stream);
-	SFPFunction_delete(outFunc);
-
-	return SFP_OK;
-}
-
-SFPResult SetAESKeyCallback(SFPFunction *func) {
-	if (SFPFunction_getArgumentCount(func) != 1) return SFP_ERR_ARG_COUNT;
-
-	if (SFPFunction_getArgumentType(func, 0) != SFP_ARG_BYTE_ARRAY) return SFP_ERR_ARG_TYPE;
-
-	uint32_t size = 0;
-	uint8_t *key = SFPFunction_getArgument_barray(func, 0, &size);
-
-	if (size != 16) return SFP_ERR;
-
-	WUPER_SetAESKey(key);
-
-	return SFP_OK;
-}
-
-SFPResult SetRFParamsCallback(SFPFunction *func) {
-	if (SFPFunction_getArgumentCount(func) != 8) return SFP_ERR_ARG_COUNT;
-
-	if (SFPFunction_getArgumentType(func, 0) != SFP_ARG_INT
-			|| SFPFunction_getArgumentType(func, 1) != SFP_ARG_INT
-			|| SFPFunction_getArgumentType(func, 2) != SFP_ARG_INT
-			|| SFPFunction_getArgumentType(func, 3) != SFP_ARG_INT
-			|| SFPFunction_getArgumentType(func, 4) != SFP_ARG_INT
-			|| SFPFunction_getArgumentType(func, 5) != SFP_ARG_INT
-			|| SFPFunction_getArgumentType(func, 6) != SFP_ARG_INT
-			|| SFPFunction_getArgumentType(func, 7) != SFP_ARG_INT)
-		return SFP_ERR_ARG_TYPE;
-
-	WUPERSettings settings = {
-			.frequency = SFPFunction_getArgument_int32(func, 0),
-			.datarate = SFPFunction_getArgument_int32(func, 1),
-			.modulation =  { SFPFunction_getArgument_int32(func, 2) },
-			.freqDev = SFPFunction_getArgument_int32(func, 3),
-			.txPowerdBm = SFPFunction_getArgument_int32(func, 4),
-			.networkID = SFPFunction_getArgument_int32(func, 5),
-			.sendRetryCount = SFPFunction_getArgument_int32(func, 6),
-			.ackWaitTimeout = SFPFunction_getArgument_int32(func, 7)
-	};
-
-	/*WUPERSettings settings;
-	settings.frequency = SFPFunction_getArgument_int32(func, 0);
-	settings.datarate = SFPFunction_getArgument_int32(func, 1);
-	uint32_t mod = SFPFunction_getArgument_int32(func, 2);
-	settings.modulation.type = mod & 7;
-	settings.modulation.BT1 = (mod >> 3) & 1;
-	settings.modulation.whitening = (mod >> 6) & 1;
-	settings.modulation.fec = (mod >> 7) & 1;
-	settings.freqDev = SFPFunction_getArgument_int32(func, 3);
-
-	settings.txPowerdBm = SFPFunction_getArgument_int32(func, 4);
-
-	settings.networkID = SFPFunction_getArgument_int32(func, 5);
-
-	settings.sendRetryCount = SFPFunction_getArgument_int32(func, 6);
-	settings.ackWaitTimeout = SFPFunction_getArgument_int32(func, 7);*/
-
-	WUPER_SetRFSettings(&settings);
-
-	return SFP_OK;
-}
-
-SFPResult CDCDefaultCallback(SFPFunction *func) {
-	if (SFPFunction_getArgumentCount(func) < 1) return SFP_ERR_ARG_COUNT;
-
-	if (SFPFunction_getArgumentType(func, 0) != SFP_ARG_INT) return SFP_ERR_ARG_TYPE;
-
-	WUPER_SetDestinationAddress(SFPFunction_getArgument_int32(func, 0));
-	SFPFunction_setArgument_int32(func, 0, WUPER_GetDeviceAddress());
-	SFPFunction_send(func, &spirit_stream);
-	return SFP_OK;
-}
-
-SFPResult SpiritDefaultCallback(SFPFunction *func) {
-	if (SFPFunction_getArgumentCount(func) < 1) return SFP_ERR_ARG_COUNT;
-
-	if (SFPFunction_getArgumentType(func, 0) != SFP_ARG_INT) return SFP_ERR_ARG_TYPE;
-
-	uint32_t addr = SFPFunction_getArgument_int32(func, 0);
-
-	if (!WUPER_ContainsNode(addr)) return SFP_ERR;
-
-	SFPFunction_send(func, &stream);
-	return SFP_OK;
-}
-
-SFPResult AddNodeCallback(SFPFunction *func) {
-	if (SFPFunction_getArgumentCount(func) != 1) return SFP_ERR_ARG_COUNT;
-
-	if (SFPFunction_getArgumentType(func, 0) != SFP_ARG_INT) return SFP_ERR_ARG_TYPE;
-
-	uint32_t addr = SFPFunction_getArgument_int32(func, 0);
-
-	if (WUPER_AddNode(addr) != WUPER_OK) return SFP_ERR;
-
-	return SFP_OK;
-}
-
-SFPResult DelNodeCallback(SFPFunction *func) {
-	if (SFPFunction_getArgumentCount(func) != 1) return SFP_ERR_ARG_COUNT;
-
-	if (SFPFunction_getArgumentType(func, 0) != SFP_ARG_INT) return SFP_ERR_ARG_TYPE;
-
-	uint32_t addr = SFPFunction_getArgument_int32(func, 0);
-
-	if (WUPER_DeleteNode(addr) != WUPER_OK) return SFP_ERR;
-
-	return SFP_OK;
-}
-
-SFPResult ClearNodesCallback(SFPFunction *func) {
-	if (SFPFunction_getArgumentCount(func) != 0) return SFP_ERR_ARG_COUNT;
-
-	if (WUPER_ClearNodes() != WUPER_OK) return SFP_ERR;
-
-	return SFP_OK;
-}
-
-SFPResult GetNodesCallback(SFPFunction *func) {
-	if (SFPFunction_getArgumentCount(func) != 0) return SFP_ERR_ARG_COUNT;
-
-	SFPFunction *outFunc = SFPFunction_new();
-	if (outFunc == NULL) return SFP_ERR_ALLOC_FAILED;
-
-	SFPFunction_setType(outFunc, SFPFunction_getType(func));
-	SFPFunction_setName(outFunc, WUPER_CDC_FNAME_GETNODES);
-	SFPFunction_setID(outFunc, WUPER_CDC_FID_GETNODES);
-
-	uint8_t i;
-	uint32_t nodeCount = WUPER_GetNodeCount();
-	for (i=0; i<nodeCount; i++)
-		SFPFunction_addArgument_int32(outFunc, WUPER_GetNodeAddress(i));
-
-	SFPFunction_send(outFunc, &stream);
-	SFPFunction_delete(outFunc);
-
-	return SFP_OK;
-}
-
-SFPResult GetNodeInfoCallback(SFPFunction *func) {
-	if (SFPFunction_getArgumentCount(func) != 1) return SFP_ERR_ARG_COUNT;
-
-	if (SFPFunction_getArgumentType(func, 0) != SFP_ARG_INT) return SFP_ERR_ARG_TYPE;
-
-	uint32_t addr = SFPFunction_getArgument_int32(func, 0);
-
-	uint16_t inSignalQuality, outSignalQuality;
-	WUPER_GetNodeInfo(addr, &inSignalQuality, &outSignalQuality);
-
-	SFPFunction *outFunc = SFPFunction_new();
-	if (outFunc == NULL) return SFP_ERR_ALLOC_FAILED;
-
-	SFPFunction_setType(outFunc, SFPFunction_getType(func));
-	SFPFunction_setName(outFunc, WUPER_CDC_FNAME_GETNODEINFO);
-	SFPFunction_setID(outFunc, WUPER_CDC_FID_GETNODEINFO);
-
-	SFPFunction_addArgument_int32(outFunc, addr);
-	SFPFunction_addArgument_int32(outFunc, inSignalQuality);
-	SFPFunction_addArgument_int32(outFunc, outSignalQuality);
-
-	SFPFunction_send(outFunc, &stream);
-	SFPFunction_delete(outFunc);
-
-	return SFP_OK;
-}
-
-SFPResult lpc_system_getDeviceInfo(SFPFunction *msg) {
-	if (SFPFunction_getArgumentCount(msg) != 0) return SFP_ERR_ARG_COUNT;
-
-	SFPFunction *func = SFPFunction_new();
-
-	if (func == NULL) return SFP_ERR_ALLOC_FAILED;
-
-	SFPFunction_setType(func, SFPFunction_getType(msg));
-	SFPFunction_setID(func, WUPER_CDC_FID_GETDEVINFO);
-	SFPFunction_setName(func, WUPER_CDC_FNAME_GETDEVINFO);
-	SFPFunction_addArgument_int32(func, WUPER_FIRMWARE_VERSION);
-	SFPFunction_addArgument_barray(func, (uint8_t*)&GUID[0], 16);
-	SFPFunction_addArgument_int32(func, IAP_GetPartNumber());
-	SFPFunction_addArgument_int32(func, IAP_GetBootCodeVersion());
-	SFPFunction_send(func, &stream);
-	SFPFunction_delete(func);
-
-	return SFP_OK;
-}
-
-SFPResult SleepCallback(SFPFunction *func) {
-	if (SFPFunction_getArgumentCount(func) != 2) return SFP_ERR_ARG_COUNT;
-
-	if (SFPFunction_getArgumentType(func, 0) != SFP_ARG_INT
-			|| SFPFunction_getArgumentType(func, 1) != SFP_ARG_INT)
-		return SFP_ERR_ARG_TYPE;
-
-	uint32_t sleepTime = SFPFunction_getArgument_int32(func, 1);
-
-	WUPER_Shutdown();
-	isInPowerDown = 1;
-	Power_startWatchdog(sleepTime);
-	Power_enterPowerDown();
-
-	if (isInPowerDown) {
-		Power_exitPowerDown();
-		Power_stopWatchdog();
-		isInPowerDown = 0;
-		WUPER_Restart();
-	}
 
 	return SFP_OK;
 }
@@ -411,35 +75,16 @@ int main(void) {
 	LPC_GPIO->DIR[0] |= BIT7;
 	LPC_GPIO->CLR[0] |= BIT7;
 
-//LPC_GPIO->DIR[1] |= BIT15;
-//LPC_GPIO->CLR[1] |= BIT15;
+	System_powerSaveTimeout = 5000; // 5 seconds
+	System_powerDownTimeout = 10; // 10 seconds
 
-	/* Load CDC and Spirit streams */
-	CDC_Init(&stream, GUID);
+	/* Initialize Spirit side */
 	WUPER_Init(&spirit_stream, GUID);
+	uint8_t settingsLoaded = System_loadWuperSettings();
 
-	/* SFP initialization, configuration and launch */
-	SFPServer *cdcServer = SFPServer_new(&stream);
 	SFPServer *spiritServer = SFPServer_new(&spirit_stream);
 
-	/* CDC SFP server initialization */
-	SFPServer_addFunctionHandler(cdcServer, WUPER_CDC_FNAME_GETDEVADDRESS,	WUPER_CDC_FID_GETDEVADDRESS,	GetDeviceAddrCallback);
-	SFPServer_addFunctionHandler(cdcServer, WUPER_CDC_FNAME_GETTRAFFICINFO,	WUPER_CDC_FID_GETTRAFFICINFO,	GetTrafficInfoCallback);
-	SFPServer_addFunctionHandler(cdcServer, WUPER_CDC_FNAME_SETAESKEY,	WUPER_CDC_FID_SETAESKEY,	SetAESKeyCallback);
-	SFPServer_addFunctionHandler(cdcServer, WUPER_CDC_FNAME_SETRFPARAMS,WUPER_CDC_FID_SETRFPARAMS,	SetRFParamsCallback);
-	SFPServer_addFunctionHandler(cdcServer, WUPER_CDC_FNAME_PING,		WUPER_CDC_FID_PING,			PingSendCallback);
-
-	SFPServer_addFunctionHandler(cdcServer, WUPER_CDC_FNAME_ADDNODE,	WUPER_CDC_FID_ADDNODE,		AddNodeCallback);
-	SFPServer_addFunctionHandler(cdcServer, WUPER_CDC_FNAME_DELNODE,	WUPER_CDC_FID_DELNODE,		DelNodeCallback);
-	SFPServer_addFunctionHandler(cdcServer, WUPER_CDC_FNAME_CLRNODES,	WUPER_CDC_FID_CLRNODES,		ClearNodesCallback);
-	SFPServer_addFunctionHandler(cdcServer, WUPER_CDC_FNAME_GETNODES,	WUPER_CDC_FID_GETNODES,		GetNodesCallback);
-	SFPServer_addFunctionHandler(cdcServer, WUPER_CDC_FNAME_GETNODEINFO,WUPER_CDC_FID_GETNODEINFO,	GetNodeInfoCallback);
-
-	SFPServer_addFunctionHandler(cdcServer, WUPER_CDC_FNAME_GETDEVINFO,	WUPER_CDC_FID_GETDEVINFO, lpc_system_getDeviceInfo);
-
-	SFPServer_setDefaultFunctionHandler(cdcServer, CDCDefaultCallback);
-
-
+#ifdef WUPER_NODE
 	/* Spirit SFP server initialization*/
 	/* GPIO/Pin functions */
 	SFPServer_addFunctionHandler(spiritServer, WUPER_RF_FNAME_SETPRIMARY,	WUPER_RF_FID_SETPRIMARY,	lpc_config_setPrimary);
@@ -473,24 +118,212 @@ int main(void) {
 	SFPServer_addFunctionHandler(spiritServer, WUPER_RF_FNAME_PWM1BEGIN, WUPER_RF_FID_PWM1BEGIN, lpc_pwm1_begin);
 	SFPServer_addFunctionHandler(spiritServer, WUPER_RF_FNAME_PWM1SET,   WUPER_RF_FID_PWM1SET, lpc_pwm1_set);
 	SFPServer_addFunctionHandler(spiritServer, WUPER_RF_FNAME_PWM1END,   WUPER_RF_FID_PWM1END, lpc_pwm1_end);
-
+#endif
 	/* System functions */
 	SFPServer_addFunctionHandler(spiritServer, WUPER_RF_FNAME_PING, WUPER_RF_FID_PING, PingReceiveCallback);
 	SFPServer_addFunctionHandler(spiritServer, WUPER_RF_FNAME_PONG, WUPER_RF_FID_PONG, PongReceiveCallback);
-	SFPServer_addFunctionHandler(spiritServer, "sleep", 0xFE, SleepCallback);
 	SFPServer_addFunctionHandler(spiritServer, "led", 0x81, LedCallback);
 
 	SFPServer_setDefaultFunctionHandler(spiritServer, SpiritDefaultCallback);
+
+#ifdef WUPER_NODE
+	System_mode = SYSTEM_MODE_POWER_SAVE;
+
+	if (!settingsLoaded) {
+		System_mode = SYSTEM_MODE_ACTIVE;
+	}
+
+
+	if (System_mode == SYSTEM_MODE_ACTIVE) {
+		/* Initialize CDC  */
+		CDC_Init(&stream, GUID);
+
+		/* CDC SFP server initialization */
+		SFPServer *cdcServer = SFPServer_new(&stream);
+
+		SFPServer_addFunctionHandler(cdcServer, WUPER_CDC_FNAME_GETDEVADDRESS,	WUPER_CDC_FID_GETDEVADDRESS,	GetDeviceAddrCallback);
+		SFPServer_addFunctionHandler(cdcServer, WUPER_CDC_FNAME_GETTRAFFICINFO,	WUPER_CDC_FID_GETTRAFFICINFO,	GetTrafficInfoCallback);
+		SFPServer_addFunctionHandler(cdcServer, WUPER_CDC_FNAME_SETAESKEY,	WUPER_CDC_FID_SETAESKEY,	SetAESKeyCallback);
+		SFPServer_addFunctionHandler(cdcServer, WUPER_CDC_FNAME_SETRFPARAMS,WUPER_CDC_FID_SETRFPARAMS,	SetRFParamsCallback);
+		SFPServer_addFunctionHandler(cdcServer, WUPER_CDC_FNAME_PING,		WUPER_CDC_FID_PING,			PingSendCallback);
+
+		SFPServer_addFunctionHandler(cdcServer, WUPER_CDC_FNAME_ADDNODE,	WUPER_CDC_FID_ADDNODE,		AddNodeCallback);
+		SFPServer_addFunctionHandler(cdcServer, WUPER_CDC_FNAME_DELNODE,	WUPER_CDC_FID_DELNODE,		DelNodeCallback);
+		SFPServer_addFunctionHandler(cdcServer, WUPER_CDC_FNAME_CLRNODES,	WUPER_CDC_FID_CLRNODES,		ClearNodesCallback);
+		SFPServer_addFunctionHandler(cdcServer, WUPER_CDC_FNAME_GETNODES,	WUPER_CDC_FID_GETNODES,		GetNodesCallback);
+		SFPServer_addFunctionHandler(cdcServer, WUPER_CDC_FNAME_GETNODEINFO,WUPER_CDC_FID_GETNODEINFO,	GetNodeInfoCallback);
+
+		SFPServer_addFunctionHandler(cdcServer, WUPER_CDC_FNAME_SAVESETTINGS, WUPER_CDC_FID_SAVESETTINGS, SaveSettingsCallback);
+		SFPServer_addFunctionHandler(cdcServer, WUPER_CDC_FNAME_ENTERPOWERSAVE, WUPER_CDC_FID_ENTERPOWERSAVE, EnterPowerSaveCallback);
+
+		SFPServer_addFunctionHandler(cdcServer, WUPER_CDC_FNAME_GETDEVINFO,	WUPER_CDC_FID_GETDEVINFO, lpc_system_getDeviceInfo);
+
+		SFPServer_setDefaultFunctionHandler(cdcServer, CDCDefaultCallback);
+
+		while (System_mode == SYSTEM_MODE_ACTIVE) {
+			SFPServer_cycle(cdcServer);
+			SFPServer_cycle(spiritServer);
+			GPIO_handleInterrupts();
+		}
+
+		SFPServer_delete(cdcServer);
+		CDC_Shutdown();
+	}
+
+	SFPServer_addFunctionHandler(spiritServer, "sleep", 0xFE, SleepCallback);
+
+	while (1) {
+		System_resetPowerSaveTimeout();
+		while (Time_getSystemTime()-System_powerSaveStart < System_powerSaveTimeout) { // 15seconds
+			/* Interrupt part */
+			if (LPC_SYSCON->SYSRSTSTAT & 0x1F) { // System reset
+				System_sendInterrupt(SYSTEM_INTERRUPT_RESET, LPC_SYSCON->SYSRSTSTAT & 0x1F, 0);
+				LPC_SYSCON->SYSRSTSTAT = 0x1F; // Clear flags
+			}
+			GPIO_handleInterrupts();
+
+			/* Processing part */
+			SFPServer_cycle(spiritServer);
+		}
+		System_enterPowerDown(System_powerDownTimeout); //5 seconds
+	}
+
+#else
+
+	/* Initialize CDC side */
+	CDC_Init(&stream, GUID);
+
+	/* SFP initialization, configuration and launch */
+	SFPServer *cdcServer = SFPServer_new(&stream);
+
+	/* CDC SFP server initialization */
+	SFPServer_addFunctionHandler(cdcServer, WUPER_CDC_FNAME_GETDEVADDRESS,	WUPER_CDC_FID_GETDEVADDRESS,	GetDeviceAddrCallback);
+	SFPServer_addFunctionHandler(cdcServer, WUPER_CDC_FNAME_GETTRAFFICINFO,	WUPER_CDC_FID_GETTRAFFICINFO,	GetTrafficInfoCallback);
+	SFPServer_addFunctionHandler(cdcServer, WUPER_CDC_FNAME_SETAESKEY,	WUPER_CDC_FID_SETAESKEY,	SetAESKeyCallback);
+	SFPServer_addFunctionHandler(cdcServer, WUPER_CDC_FNAME_SETRFPARAMS,WUPER_CDC_FID_SETRFPARAMS,	SetRFParamsCallback);
+	SFPServer_addFunctionHandler(cdcServer, WUPER_CDC_FNAME_PING,		WUPER_CDC_FID_PING,			PingSendCallback);
+
+	SFPServer_addFunctionHandler(cdcServer, WUPER_CDC_FNAME_ADDNODE,	WUPER_CDC_FID_ADDNODE,		AddNodeCallback);
+	SFPServer_addFunctionHandler(cdcServer, WUPER_CDC_FNAME_DELNODE,	WUPER_CDC_FID_DELNODE,		DelNodeCallback);
+	SFPServer_addFunctionHandler(cdcServer, WUPER_CDC_FNAME_CLRNODES,	WUPER_CDC_FID_CLRNODES,		ClearNodesCallback);
+	SFPServer_addFunctionHandler(cdcServer, WUPER_CDC_FNAME_GETNODES,	WUPER_CDC_FID_GETNODES,		GetNodesCallback);
+	SFPServer_addFunctionHandler(cdcServer, WUPER_CDC_FNAME_GETNODEINFO,WUPER_CDC_FID_GETNODEINFO,	GetNodeInfoCallback);
+
+	SFPServer_addFunctionHandler(cdcServer, WUPER_CDC_FNAME_GETDEVINFO,	WUPER_CDC_FID_GETDEVINFO, lpc_system_getDeviceInfo);
+
+	SFPServer_setDefaultFunctionHandler(cdcServer, CDCDefaultCallback);
 
 
 	while (1) {
 		SFPServer_cycle(cdcServer);
 		SFPServer_cycle(spiritServer);
-		GPIO_handleInterrupts();
+	}
+#endif
+
+}
+
+uint8_t System_loadWuperSettings(void) {
+	uint8_t magicHeader = 0;
+	IAP_ReadEEPROM(EEPROM_WUPER_SETTINGS, &magicHeader, 1);
+	if (magicHeader != EEPROM_HEADER_SETTINGS)
+		return 0;
+
+	WUPERSettings wuperSettings = { 0 };
+	IAP_ReadEEPROM(EEPROM_WUPER_SETTINGS+1, (uint8_t*)&wuperSettings, sizeof(WUPERSettings));
+	WUPER_SetRFSettings(&wuperSettings);
+	WUPER_SetAESKey(wuperSettings.aesKey);
+
+
+	magicHeader = 0;
+	IAP_ReadEEPROM(EEPROM_WUPER_NODES, &magicHeader, 1);
+
+	if (magicHeader == EEPROM_HEADER_NODES) {
+		uint8_t nNodes = 0;
+		IAP_ReadEEPROM(EEPROM_WUPER_NODES+1, &nNodes, 1);
+
+		uint32_t addr = EEPROM_WUPER_NODES+2;
+		while (nNodes--) {
+			uint32_t tmpNodeAddress = 0;
+			IAP_ReadEEPROM(addr, (uint8_t*)&tmpNodeAddress, 4);
+			addr += 4;
+			WUPER_AddNode(tmpNodeAddress);
+		}
 	}
 
-	SFPServer_delete(cdcServer);
-	SFPServer_delete(spiritServer);
+	return 1;
+}
 
-	while (1);
+uint8_t System_saveWuperSettings(void) {
+	uint8_t magicHeader = 0;
+
+	// "Delete" old config by clearing headers
+	IAP_WriteEEPROM(EEPROM_WUPER_SETTINGS, &magicHeader, 1);
+	IAP_WriteEEPROM(EEPROM_WUPER_NODES, &magicHeader, 1);
+
+	// Save node information
+	uint8_t nNodes = WUPER_GetNodeCount();
+	IAP_WriteEEPROM(EEPROM_WUPER_NODES+1, &nNodes, 1);
+
+	uint32_t addr = EEPROM_WUPER_NODES+2;
+	uint8_t i;
+	for (i=0; i<nNodes; i++) {
+		uint32_t tmpNodeAddress = WUPER_GetNodeAddress(i);
+		IAP_WriteEEPROM(addr, (uint8_t*)&tmpNodeAddress, 4);
+		addr += 4;
+	}
+
+	// Save radio settings
+	WUPERSettings wuperSettings = { 0 };
+	WUPER_GetRFSettings(&wuperSettings);
+	IAP_WriteEEPROM(EEPROM_WUPER_SETTINGS+1, (uint8_t*)&wuperSettings, sizeof(WUPERSettings));
+
+
+	// Finally confirm settings by writing headers
+	magicHeader = EEPROM_HEADER_NODES;
+	IAP_WriteEEPROM(EEPROM_WUPER_NODES, &magicHeader, 1);
+
+	magicHeader = EEPROM_HEADER_SETTINGS;
+	IAP_WriteEEPROM(EEPROM_WUPER_SETTINGS, &magicHeader, 1);
+
+	return 1;
+}
+
+void System_sendInterrupt(uint8_t interruptType, uint32_t param1, uint32_t param2) {
+	SFPFunction *func = SFPFunction_new();
+	if (func != NULL) {
+		WUPER_SetDestinationAddress(WUPER_GetNodeAddress(0));
+
+		SFPFunction_setType(func, SFP_FUNC_TYPE_TEXT);
+		SFPFunction_setID(func, WUPER_RF_FID_INTERRUPT);
+		SFPFunction_setName(func, WUPER_RF_FNAME_INTERRUPT);
+
+		SFPFunction_addArgument_int32(func, WUPER_GetDeviceAddress());
+		SFPFunction_addArgument_int32(func, interruptType);
+		SFPFunction_addArgument_int32(func, param1);
+		SFPFunction_addArgument_int32(func, param2);
+
+		SFPFunction_send(func, &spirit_stream);
+		SFPFunction_delete(func);
+	}
+}
+
+void System_resetPowerSaveTimeout(void) {
+	System_powerSaveStart = Time_getSystemTime();
+}
+
+void System_enterPowerDown(uint32_t timeout) {
+	if (timeout == 0)
+		return;
+
+	WUPER_Shutdown();
+	System_mode = SYSTEM_MODE_POWER_DOWN;
+	Power_startWatchdog(timeout);
+	Power_enterPowerDown();
+
+	Power_exitPowerDown();
+	Power_stopWatchdog();
+	System_mode = SYSTEM_MODE_POWER_SAVE;
+	WUPER_Restart();
+
+	System_sendInterrupt(SYSTEM_INTERRUPT_WAKEUP, 0, 0);
 }

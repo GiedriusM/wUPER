@@ -341,14 +341,20 @@ ErrorCode_t CDC_Init(SFPStream *stream, uint32_t guid[4]) {
 	/* USB Connect */
 	pUsbApi->hw->Connect(hUsb, 1);
 
-	//UART_Init(9600, 8, PARITY_NONE, STOP_BIT_1); // 9600 8n1
-
 	stream->available = CDC_Stream_available;
 	stream->read 	  = CDC_Stream_read;
 	stream->readByte  = CDC_Stream_readByte;
 	stream->write	  = CDC_Stream_write;
 
 	return LPC_OK;
+}
+
+void CDC_Shutdown(void) {
+	pUsbApi->hw->Connect(pUsbHandle, 0);
+
+	NVIC_DisableIRQ(USB_IRQn);
+
+	LPC_SYSCON->SYSAHBCLKCTRL &= ~((1 << 14) | (1 << 27)); // Disable clocks
 }
 
 void USB_pin_clk_init(void) {

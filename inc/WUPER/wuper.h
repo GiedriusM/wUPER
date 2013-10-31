@@ -76,6 +76,8 @@ typedef struct {
 
 	uint8_t networkID;
 
+	uint8_t aesKey[16];
+
 	uint32_t sendRetryCount;
 	uint32_t ackWaitTimeout;
 } WUPERSettings;
@@ -91,6 +93,7 @@ void	 	WUPER_GetTrafficStatistics(WUPERTrafficStatistics *stats);
 void 		WUPER_SetDestinationAddress(uint32_t addr);
 void		WUPER_SetAESKey(uint8_t key[16]);
 void 		WUPER_SetRFSettings(WUPERSettings *settings);
+void 		WUPER_GetRFSettings(WUPERSettings *settings);
 
 WUPERResult WUPER_AddNode(uint32_t addr);
 WUPERResult WUPER_DeleteNode(uint32_t addr);
