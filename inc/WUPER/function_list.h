@@ -71,6 +71,9 @@ SFPResult GetNodeInfoCallback(SFPFunction *func);
 SFPResult SaveSettingsCallback(SFPFunction *func);
 SFPResult EnterPowerSaveCallback(SFPFunction *func);
 
+SFPResult SetSystemSettingsCallback(SFPFunction *func);
+SFPResult GetSystemSettingsCallback(SFPFunction *func);
+
 SFPResult lpc_system_getDeviceInfo(SFPFunction *msg);
 
 SFPResult SleepCallback(SFPFunction *func);

@@ -356,6 +356,38 @@ SFPResult EnterPowerSaveCallback(SFPFunction *func) {
 	return SFP_OK;
 }
 
+SFPResult SetSystemSettingsCallback(SFPFunction *func) {
+	if (SFPFunction_getArgumentCount(func) != 2) return SFP_ERR_ARG_COUNT;
+
+	if (SFPFunction_getArgumentType(func, 0) != SFP_ARG_INT
+			|| SFPFunction_getArgumentType(func, 1) != SFP_ARG_INT)
+		return SFP_ERR_ARG_TYPE;
+
+	System_powerSaveTimeout = SFPFunction_getArgument_int32(func, 0);
+	System_powerDownTimeout = SFPFunction_getArgument_int32(func, 1);
+
+	return SFP_OK;
+}
+
+SFPResult GetSystemSettingsCallback(SFPFunction *func) {
+	if (SFPFunction_getArgumentCount(func) != 0) return SFP_ERR_ARG_COUNT;
+
+	SFPFunction *outFunc = SFPFunction_new();
+
+	if (outFunc == NULL) return SFP_ERR_ALLOC_FAILED;
+
+	SFPFunction_setType(outFunc, SFPFunction_getType(func));
+	SFPFunction_setName(outFunc, WUPER_CDC_FNAME_GETSYSSETTINGS);
+	SFPFunction_setID(outFunc, WUPER_CDC_FID_GETSYSSETTINGS);
+	SFPFunction_addArgument_int32(outFunc, System_powerSaveTimeout);
+	SFPFunction_addArgument_int32(outFunc, System_powerDownTimeout);
+
+	SFPFunction_send(outFunc, &stream);
+	SFPFunction_delete(outFunc);
+
+	return SFP_OK;
+}
+
 SFPResult lpc_system_getDeviceInfo(SFPFunction *msg) {
 	if (SFPFunction_getArgumentCount(msg) != 0) return SFP_ERR_ARG_COUNT;
 

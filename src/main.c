@@ -42,8 +42,6 @@
 #define EEPROM_ADDR_NODES		0x100
 
 static volatile uint32_t System_powerSaveStart;
-static uint32_t System_powerSaveTimeout;
-static uint32_t System_powerDownTimeout;
 
 SFPResult LedCallback(SFPFunction *msg) {
 	LPC_GPIO->NOT[0] |= BIT7;
@@ -158,6 +156,9 @@ int main(void) {
 		SFPServer_addFunctionHandler(cdcServer, WUPER_CDC_FNAME_SAVESETTINGS, WUPER_CDC_FID_SAVESETTINGS, SaveSettingsCallback);
 		SFPServer_addFunctionHandler(cdcServer, WUPER_CDC_FNAME_ENTERPOWERSAVE, WUPER_CDC_FID_ENTERPOWERSAVE, EnterPowerSaveCallback);
 
+		SFPServer_addFunctionHandler(cdcServer, WUPER_CDC_FNAME_SETSYSSETTINGS,	WUPER_CDC_FID_SETSYSSETTINGS, SetSystemSettingsCallback);
+		SFPServer_addFunctionHandler(cdcServer, WUPER_CDC_FNAME_GETSYSSETTINGS,	WUPER_CDC_FID_GETSYSSETTINGS, GetSystemSettingsCallback);
+
 		SFPServer_addFunctionHandler(cdcServer, WUPER_CDC_FNAME_GETDEVINFO,	WUPER_CDC_FID_GETDEVINFO, lpc_system_getDeviceInfo);
 
 		SFPServer_setDefaultFunctionHandler(cdcServer, CDCDefaultCallback);
@@ -213,6 +214,9 @@ int main(void) {
 	SFPServer_addFunctionHandler(cdcServer, WUPER_CDC_FNAME_GETNODEINFO,WUPER_CDC_FID_GETNODEINFO,	GetNodeInfoCallback);
 
 	SFPServer_addFunctionHandler(cdcServer, WUPER_CDC_FNAME_SAVESETTINGS, WUPER_CDC_FID_SAVESETTINGS, SaveSettingsCallback);
+
+	SFPServer_addFunctionHandler(cdcServer, WUPER_CDC_FNAME_SETSYSSETTINGS,	WUPER_CDC_FID_SETSYSSETTINGS, SetSystemSettingsCallback);
+	SFPServer_addFunctionHandler(cdcServer, WUPER_CDC_FNAME_GETSYSSETTINGS,	WUPER_CDC_FID_GETSYSSETTINGS, GetSystemSettingsCallback);
 
 	SFPServer_addFunctionHandler(cdcServer, WUPER_CDC_FNAME_GETDEVINFO,	WUPER_CDC_FID_GETDEVINFO, lpc_system_getDeviceInfo);
 

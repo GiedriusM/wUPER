@@ -76,6 +76,9 @@ enum {
 	SYSTEM_MODE_POWER_DOWN
 } System_mode;
 
+uint32_t System_powerSaveTimeout;
+uint32_t System_powerDownTimeout;
+
 #define SYSTEM_INTERRUPT_RESET		1
 #define SYSTEM_INTERRUPT_WAKEUP		5
 #define SYSTEM_INTERRUPT_GPIO		7
