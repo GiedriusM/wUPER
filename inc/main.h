@@ -70,8 +70,6 @@ SFPStream spirit_stream;
 
 uint32_t GUID[4];
 
-#ifdef WUPER_NODE
-
 enum {
 	SYSTEM_MODE_ACTIVE,
 	SYSTEM_MODE_POWER_SAVE,
@@ -87,7 +85,6 @@ void System_sendInterrupt(uint8_t interruptType, uint32_t param1, uint32_t param
 void System_resetPowerSaveTimeout(void);
 void System_enterPowerDown(uint32_t timeout);
 
-#endif
 
 uint8_t System_loadWuperSettings(void);
 uint8_t System_saveWuperSettings(void);
