@@ -215,9 +215,6 @@ int main(void) {
 
 	SFPServer_addFunctionHandler(cdcServer, WUPER_CDC_FNAME_SAVESETTINGS, WUPER_CDC_FID_SAVESETTINGS, SaveSettingsCallback);
 
-	SFPServer_addFunctionHandler(cdcServer, WUPER_CDC_FNAME_SETSYSSETTINGS,	WUPER_CDC_FID_SETSYSSETTINGS, SetSystemSettingsCallback);
-	SFPServer_addFunctionHandler(cdcServer, WUPER_CDC_FNAME_GETSYSSETTINGS,	WUPER_CDC_FID_GETSYSSETTINGS, GetSystemSettingsCallback);
-
 	SFPServer_addFunctionHandler(cdcServer, WUPER_CDC_FNAME_GETDEVINFO,	WUPER_CDC_FID_GETDEVINFO, lpc_system_getDeviceInfo);
 
 	SFPServer_setDefaultFunctionHandler(cdcServer, CDCDefaultCallback);
@@ -264,7 +261,7 @@ uint8_t System_loadSettings(void) {
 uint8_t System_saveSettings(void) {
 	// "Delete" old config by clearing magic "version" number
 	uint32_t magicHeader = 0;
-	IAP_WriteEEPROM(EEPROM_ADDR_MAGIC, (uint8_t*)&magicHeader, 1);
+	IAP_WriteEEPROM(EEPROM_ADDR_MAGIC, (uint8_t*)&magicHeader, 4);
 
 
 	// Save System settings
@@ -291,7 +288,7 @@ uint8_t System_saveSettings(void) {
 
 	// Finally confirm settings by writing magic number
 	magicHeader = EEPROM_MAGIC_NUMBER;
-	IAP_WriteEEPROM(EEPROM_ADDR_MAGIC, (uint8_t*)&magicHeader, 1);
+	IAP_WriteEEPROM(EEPROM_ADDR_MAGIC, (uint8_t*)&magicHeader, 4);
 
 	return 1;
 }
