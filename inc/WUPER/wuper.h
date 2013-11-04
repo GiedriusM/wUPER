@@ -92,7 +92,6 @@ void	 	WUPER_GetTrafficStatistics(WUPERTrafficStatistics *stats);
 void		WUPER_ClearTrafficStatistics(void);
 
 void 		WUPER_SetDestinationAddress(uint32_t addr);
-void		WUPER_SetAESKey(uint8_t key[16]);
 void 		WUPER_SetRFSettings(WUPERSettings *settings);
 void 		WUPER_GetRFSettings(WUPERSettings *settings);
 

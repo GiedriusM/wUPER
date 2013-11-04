@@ -194,13 +194,16 @@ SFPResult SetRFParamsCallback(SFPFunction *func) {
 	uint32_t size = 0;
 	uint8_t *key = SFPFunction_getArgument_barray(func, 8, &size);
 
+	uint8_t i;
+	for (i=0; i<16; i++) {
+		settings.aesKey[i] = key[i];
+	}
+
 	// Check values
 	if (size != 16) return SFP_ERR_ARG_VALUE;
 
 	// Set parameters
 	WUPER_SetRFSettings(&settings);
-
-	WUPER_SetAESKey(key);
 
 	return SFP_OK;
 }

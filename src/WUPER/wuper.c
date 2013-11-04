@@ -991,14 +991,6 @@ void WUPER_SetDestinationAddress(uint32_t addr) {
 	WUPER_destinationAddress = addr;
 }
 
-void WUPER_SetAESKey(uint8_t key[16]) {
-	uint8_t i;
-	for (i=0; i<16; i++)
-		WUPER_settings.aesKey[i] = key[i];
-
-	SpiritAesWriteKey(WUPER_settings.aesKey);
-}
-
 void WUPER_SetRFSettings(WUPERSettings *settings) {
 	WUPER_settings = *settings;
 
@@ -1054,6 +1046,8 @@ void WUPER_SetRFSettings(WUPERSettings *settings) {
 	SpiritPktBasicInit(&spiritBasicPacketInit);
 	SpiritPktBasicAddressesInit(&spiritBasicPacketAddresses);
 	SpiritPktCommonSetDestinationAddress(WUPER_settings.networkID); // Address (network ID)
+
+	SpiritAesWriteKey(WUPER_settings.aesKey);
 
 	// Return to RX state if needed
 	if (spiritStatus.MC_STATE == MC_STATE_RX)

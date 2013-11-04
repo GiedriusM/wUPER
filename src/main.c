@@ -241,8 +241,6 @@ uint8_t System_loadSettings(void) {
 	WUPERSettings wuperSettings = { 0 };
 	IAP_ReadEEPROM(EEPROM_ADDR_RFSETTINGS, (uint8_t*)&wuperSettings, sizeof(WUPERSettings));
 	WUPER_SetRFSettings(&wuperSettings);
-	WUPER_SetAESKey(wuperSettings.aesKey);
-
 
 	// Nodes
 	uint8_t nNodes = 0;
