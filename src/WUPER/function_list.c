@@ -340,7 +340,7 @@ SFPResult GetNodeInfoCallback(SFPFunction *func) {
 SFPResult SaveSettingsCallback(SFPFunction *func) {
 	if (SFPFunction_getArgumentCount(func) != 0) return SFP_ERR_ARG_COUNT;
 
-	System_saveWuperSettings();
+	System_saveSettings();
 
 	return SFP_OK;
 }

@@ -86,8 +86,8 @@ void System_resetPowerSaveTimeout(void);
 void System_enterPowerDown(uint32_t timeout);
 
 
-uint8_t System_loadWuperSettings(void);
-uint8_t System_saveWuperSettings(void);
+uint8_t System_loadSettings(void);
+uint8_t System_saveSettings(void);
 
 
 

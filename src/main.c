@@ -34,11 +34,12 @@
 
 #include "CDC/CDC.h"
 
-#define EEPROM_WUPER_SETTINGS	0x0
-#define EEPROM_WUPER_NODES		0x100
+#define EEPROM_MAGIC_NUMBER		0xA5E769BD
 
-#define EEPROM_HEADER_SETTINGS	0x5A
-#define EEPROM_HEADER_NODES		0xA5
+#define EEPROM_ADDR_MAGIC		0x0
+#define EEPROM_ADDR_SYSSETTINGS	0x10
+#define EEPROM_ADDR_RFSETTINGS	0x50
+#define EEPROM_ADDR_NODES		0x100
 
 static volatile uint32_t System_powerSaveStart;
 static uint32_t System_powerSaveTimeout;
@@ -80,7 +81,7 @@ int main(void) {
 
 	/* Initialize Spirit side */
 	WUPER_Init(&spirit_stream, GUID);
-	uint8_t settingsLoaded = System_loadWuperSettings();
+	uint8_t settingsLoaded = System_loadSettings();
 
 	SFPServer *spiritServer = SFPServer_new(&spirit_stream);
 
@@ -226,49 +227,58 @@ int main(void) {
 
 }
 
-uint8_t System_loadWuperSettings(void) {
-	uint8_t magicHeader = 0;
-	IAP_ReadEEPROM(EEPROM_WUPER_SETTINGS, &magicHeader, 1);
-	if (magicHeader != EEPROM_HEADER_SETTINGS)
+uint8_t System_loadSettings(void) {
+	uint32_t magicHeader = 0;
+	IAP_ReadEEPROM(EEPROM_ADDR_MAGIC, (uint8_t*)&magicHeader, 4);
+	if (magicHeader != EEPROM_MAGIC_NUMBER)
 		return 0;
 
+	// XXX: it might be worth making settings structure, like WUPERSettings
+	IAP_ReadEEPROM(EEPROM_ADDR_SYSSETTINGS, (uint8_t*)&System_powerSaveTimeout, 4);
+	IAP_ReadEEPROM(EEPROM_ADDR_SYSSETTINGS+4, (uint8_t*)&System_powerDownTimeout, 4);
+
+	// RF Settings
 	WUPERSettings wuperSettings = { 0 };
-	IAP_ReadEEPROM(EEPROM_WUPER_SETTINGS+1, (uint8_t*)&wuperSettings, sizeof(WUPERSettings));
+	IAP_ReadEEPROM(EEPROM_ADDR_RFSETTINGS, (uint8_t*)&wuperSettings, sizeof(WUPERSettings));
 	WUPER_SetRFSettings(&wuperSettings);
 	WUPER_SetAESKey(wuperSettings.aesKey);
 
 
-	magicHeader = 0;
-	IAP_ReadEEPROM(EEPROM_WUPER_NODES, &magicHeader, 1);
+	// Nodes
+	uint8_t nNodes = 0;
+	IAP_ReadEEPROM(EEPROM_ADDR_NODES, &nNodes, 1);
 
-	if (magicHeader == EEPROM_HEADER_NODES) {
-		uint8_t nNodes = 0;
-		IAP_ReadEEPROM(EEPROM_WUPER_NODES+1, &nNodes, 1);
-
-		uint32_t addr = EEPROM_WUPER_NODES+2;
-		while (nNodes--) {
-			uint32_t tmpNodeAddress = 0;
-			IAP_ReadEEPROM(addr, (uint8_t*)&tmpNodeAddress, 4);
-			addr += 4;
-			WUPER_AddNode(tmpNodeAddress);
-		}
+	uint32_t addr = EEPROM_ADDR_NODES+1;
+	while (nNodes--) {
+		uint32_t tmpNodeAddress = 0;
+		IAP_ReadEEPROM(addr, (uint8_t*)&tmpNodeAddress, 4);
+		addr += 4;
+		WUPER_AddNode(tmpNodeAddress);
 	}
 
 	return 1;
 }
 
-uint8_t System_saveWuperSettings(void) {
-	uint8_t magicHeader = 0;
+uint8_t System_saveSettings(void) {
+	// "Delete" old config by clearing magic "version" number
+	uint32_t magicHeader = 0;
+	IAP_WriteEEPROM(EEPROM_ADDR_MAGIC, (uint8_t*)&magicHeader, 1);
 
-	// "Delete" old config by clearing headers
-	IAP_WriteEEPROM(EEPROM_WUPER_SETTINGS, &magicHeader, 1);
-	IAP_WriteEEPROM(EEPROM_WUPER_NODES, &magicHeader, 1);
 
-	// Save node information
+	// Save System settings
+	IAP_WriteEEPROM(EEPROM_ADDR_SYSSETTINGS, (uint8_t*)&System_powerSaveTimeout, 4);
+	IAP_WriteEEPROM(EEPROM_ADDR_SYSSETTINGS+4, (uint8_t*)&System_powerDownTimeout, 4);
+
+	// Save RF settings
+	WUPERSettings wuperSettings = { 0 };
+	WUPER_GetRFSettings(&wuperSettings);
+	IAP_WriteEEPROM(EEPROM_ADDR_RFSETTINGS, (uint8_t*)&wuperSettings, sizeof(WUPERSettings));
+
+	// Save nodes
 	uint8_t nNodes = WUPER_GetNodeCount();
-	IAP_WriteEEPROM(EEPROM_WUPER_NODES+1, &nNodes, 1);
+	IAP_WriteEEPROM(EEPROM_ADDR_NODES, &nNodes, 1);
 
-	uint32_t addr = EEPROM_WUPER_NODES+2;
+	uint32_t addr = EEPROM_ADDR_NODES+1;
 	uint8_t i;
 	for (i=0; i<nNodes; i++) {
 		uint32_t tmpNodeAddress = WUPER_GetNodeAddress(i);
@@ -276,18 +286,10 @@ uint8_t System_saveWuperSettings(void) {
 		addr += 4;
 	}
 
-	// Save radio settings
-	WUPERSettings wuperSettings = { 0 };
-	WUPER_GetRFSettings(&wuperSettings);
-	IAP_WriteEEPROM(EEPROM_WUPER_SETTINGS+1, (uint8_t*)&wuperSettings, sizeof(WUPERSettings));
 
-
-	// Finally confirm settings by writing headers
-	magicHeader = EEPROM_HEADER_NODES;
-	IAP_WriteEEPROM(EEPROM_WUPER_NODES, &magicHeader, 1);
-
-	magicHeader = EEPROM_HEADER_SETTINGS;
-	IAP_WriteEEPROM(EEPROM_WUPER_SETTINGS, &magicHeader, 1);
+	// Finally confirm settings by writing magic number
+	magicHeader = EEPROM_MAGIC_NUMBER;
+	IAP_WriteEEPROM(EEPROM_ADDR_MAGIC, (uint8_t*)&magicHeader, 1);
 
 	return 1;
 }
