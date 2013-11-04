@@ -143,8 +143,9 @@ int main(void) {
 
 		SFPServer_addFunctionHandler(cdcServer, WUPER_CDC_FNAME_GETDEVADDRESS,	WUPER_CDC_FID_GETDEVADDRESS,	GetDeviceAddrCallback);
 		SFPServer_addFunctionHandler(cdcServer, WUPER_CDC_FNAME_GETTRAFFICINFO,	WUPER_CDC_FID_GETTRAFFICINFO,	GetTrafficInfoCallback);
-		SFPServer_addFunctionHandler(cdcServer, WUPER_CDC_FNAME_SETAESKEY,	WUPER_CDC_FID_SETAESKEY,	SetAESKeyCallback);
+		SFPServer_addFunctionHandler(cdcServer, WUPER_CDC_FNAME_CLEARTRAFFICINFO,	WUPER_CDC_FID_CLEARTRAFFICINFO,	ClearTrafficInfoCallback);
 		SFPServer_addFunctionHandler(cdcServer, WUPER_CDC_FNAME_SETRFPARAMS,WUPER_CDC_FID_SETRFPARAMS,	SetRFParamsCallback);
+		SFPServer_addFunctionHandler(cdcServer, WUPER_CDC_FNAME_GETRFPARAMS,WUPER_CDC_FID_GETRFPARAMS,	GetRFParamsCallback);
 		SFPServer_addFunctionHandler(cdcServer, WUPER_CDC_FNAME_PING,		WUPER_CDC_FID_PING,			PingSendCallback);
 
 		SFPServer_addFunctionHandler(cdcServer, WUPER_CDC_FNAME_ADDNODE,	WUPER_CDC_FID_ADDNODE,		AddNodeCallback);

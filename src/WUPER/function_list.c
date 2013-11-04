@@ -157,23 +157,16 @@ SFPResult GetTrafficInfoCallback(SFPFunction *func) {
 	return SFP_OK;
 }
 
-SFPResult SetAESKeyCallback(SFPFunction *func) {
-	if (SFPFunction_getArgumentCount(func) != 1) return SFP_ERR_ARG_COUNT;
+SFPResult ClearTrafficInfoCallback(SFPFunction *func) {
+	if (SFPFunction_getArgumentCount(func) != 0) return SFP_ERR_ARG_COUNT;
 
-	if (SFPFunction_getArgumentType(func, 0) != SFP_ARG_BYTE_ARRAY) return SFP_ERR_ARG_TYPE;
-
-	uint32_t size = 0;
-	uint8_t *key = SFPFunction_getArgument_barray(func, 0, &size);
-
-	if (size != 16) return SFP_ERR;
-
-	WUPER_SetAESKey(key);
+	WUPER_ClearTrafficStatistics();
 
 	return SFP_OK;
 }
 
 SFPResult SetRFParamsCallback(SFPFunction *func) {
-	if (SFPFunction_getArgumentCount(func) != 8) return SFP_ERR_ARG_COUNT;
+	if (SFPFunction_getArgumentCount(func) != 9) return SFP_ERR_ARG_COUNT;
 
 	if (SFPFunction_getArgumentType(func, 0) != SFP_ARG_INT
 			|| SFPFunction_getArgumentType(func, 1) != SFP_ARG_INT
@@ -182,9 +175,11 @@ SFPResult SetRFParamsCallback(SFPFunction *func) {
 			|| SFPFunction_getArgumentType(func, 4) != SFP_ARG_INT
 			|| SFPFunction_getArgumentType(func, 5) != SFP_ARG_INT
 			|| SFPFunction_getArgumentType(func, 6) != SFP_ARG_INT
-			|| SFPFunction_getArgumentType(func, 7) != SFP_ARG_INT)
+			|| SFPFunction_getArgumentType(func, 7) != SFP_ARG_INT
+			|| SFPFunction_getArgumentType(func, 8) != SFP_ARG_BYTE_ARRAY)
 		return SFP_ERR_ARG_TYPE;
 
+	// Load parameters
 	WUPERSettings settings = {
 			.frequency = SFPFunction_getArgument_int32(func, 0),
 			.datarate = SFPFunction_getArgument_int32(func, 1),
@@ -196,24 +191,44 @@ SFPResult SetRFParamsCallback(SFPFunction *func) {
 			.ackWaitTimeout = SFPFunction_getArgument_int32(func, 7)
 	};
 
-	/*WUPERSettings settings;
-	settings.frequency = SFPFunction_getArgument_int32(func, 0);
-	settings.datarate = SFPFunction_getArgument_int32(func, 1);
-	uint32_t mod = SFPFunction_getArgument_int32(func, 2);
-	settings.modulation.type = mod & 7;
-	settings.modulation.BT1 = (mod >> 3) & 1;
-	settings.modulation.whitening = (mod >> 6) & 1;
-	settings.modulation.fec = (mod >> 7) & 1;
-	settings.freqDev = SFPFunction_getArgument_int32(func, 3);
+	uint32_t size = 0;
+	uint8_t *key = SFPFunction_getArgument_barray(func, 8, &size);
 
-	settings.txPowerdBm = SFPFunction_getArgument_int32(func, 4);
+	// Check values
+	if (size != 16) return SFP_ERR_ARG_VALUE;
 
-	settings.networkID = SFPFunction_getArgument_int32(func, 5);
-
-	settings.sendRetryCount = SFPFunction_getArgument_int32(func, 6);
-	settings.ackWaitTimeout = SFPFunction_getArgument_int32(func, 7);*/
-
+	// Set parameters
 	WUPER_SetRFSettings(&settings);
+
+	WUPER_SetAESKey(key);
+
+	return SFP_OK;
+}
+
+SFPResult GetRFParamsCallback(SFPFunction *func) {
+	if (SFPFunction_getArgumentCount(func) != 0) return SFP_ERR_ARG_COUNT;
+
+	SFPFunction *outFunc = SFPFunction_new();
+
+	if (outFunc == NULL) return SFP_ERR_ALLOC_FAILED;
+
+	WUPERSettings settings = {0};
+	WUPER_GetRFSettings(&settings);
+
+	SFPFunction_setType(outFunc, SFPFunction_getType(func));
+	SFPFunction_setName(outFunc, WUPER_CDC_FNAME_GETRFPARAMS);
+	SFPFunction_setID(outFunc, WUPER_CDC_FID_GETRFPARAMS);
+	SFPFunction_addArgument_int32(outFunc, settings.frequency);
+	SFPFunction_addArgument_int32(outFunc, settings.datarate);
+	SFPFunction_addArgument_int32(outFunc, *((uint8_t*)&settings.modulation));
+	SFPFunction_addArgument_int32(outFunc, settings.freqDev);
+	SFPFunction_addArgument_int32(outFunc, settings.txPowerdBm);
+	SFPFunction_addArgument_int32(outFunc, settings.networkID);
+	SFPFunction_addArgument_int32(outFunc, settings.sendRetryCount);
+	SFPFunction_addArgument_int32(outFunc, settings.ackWaitTimeout);
+
+	SFPFunction_send(outFunc, &stream);
+	SFPFunction_delete(outFunc);
 
 	return SFP_OK;
 }

@@ -52,9 +52,11 @@ SFPResult GetDeviceAddrCallback(SFPFunction *func);
 
 SFPResult GetTrafficInfoCallback(SFPFunction *func);
 
-SFPResult SetAESKeyCallback(SFPFunction *func);
+SFPResult ClearTrafficInfoCallback(SFPFunction *func);
 
 SFPResult SetRFParamsCallback(SFPFunction *func);
+
+SFPResult GetRFParamsCallback(SFPFunction *func);
 
 SFPResult CDCDefaultCallback(SFPFunction *func);
 

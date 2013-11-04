@@ -980,6 +980,13 @@ void WUPER_GetTrafficStatistics(WUPERTrafficStatistics *stats) {
 	stats->packetSeqSet = trafficStatistics.packetSeqSet;
 }
 
+void WUPER_ClearTrafficStatistics(void) {
+	trafficStatistics.packetSendTotal = 0;
+	trafficStatistics.packetSendSuccess = 0;
+	trafficStatistics.packetSendRetry = 0;
+	trafficStatistics.packetSeqSet = 0;
+}
+
 void WUPER_SetDestinationAddress(uint32_t addr) {
 	WUPER_destinationAddress = addr;
 }

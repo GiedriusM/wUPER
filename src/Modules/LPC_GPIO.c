@@ -317,22 +317,6 @@ static void GPIO_EnableInterruptCallback(void* ptr) {
 	GPIO_EnableInterrupt((uint8_t)(uint32_t)ptr);
 }
 
-static inline void GPIO_SEND_INT(uint8_t intID, uint8_t intEvt) {
-	SFPFunction *func = SFPFunction_new();
-	if (func != NULL) {
-		WUPER_SetDestinationAddress(LPC_INTERRUPT_DESTINATION[intID]);
-
-		SFPFunction_setType(func, LPC_INTERRUPT_FUNCTION_TYPE[intID]);
-		SFPFunction_setID(func, WUPER_RF_FID_INTERRUPT);
-		SFPFunction_setName(func, WUPER_RF_FNAME_INTERRUPT);
-		SFPFunction_addArgument_int32(func, WUPER_GetDeviceAddress());
-		SFPFunction_addArgument_int32(func, intID);
-		SFPFunction_addArgument_int32(func, intEvt);
-		SFPFunction_send(func, &spirit_stream);
-		SFPFunction_delete(func);
-	}
-}
-
 static void GPIO_InterruptHandler(uint8_t intID) {
 	uint8_t intBit = (1 << intID);
 
@@ -359,7 +343,6 @@ static void GPIO_InterruptHandler(uint8_t intID) {
 	}
 
 	System_sendInterrupt(SYSTEM_INTERRUPT_GPIO, intID, interruptEvent);
-	//GPIO_SEND_INT(intID, interruptEvent);
 }
 
 void GPIO_handleInterrupts(void) {

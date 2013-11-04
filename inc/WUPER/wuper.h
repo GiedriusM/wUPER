@@ -89,6 +89,7 @@ void WUPER_Shutdown(void);
 
 uint32_t 	WUPER_GetDeviceAddress(void);
 void	 	WUPER_GetTrafficStatistics(WUPERTrafficStatistics *stats);
+void		WUPER_ClearTrafficStatistics(void);
 
 void 		WUPER_SetDestinationAddress(uint32_t addr);
 void		WUPER_SetAESKey(uint8_t key[16]);
