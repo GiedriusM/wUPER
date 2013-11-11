@@ -60,6 +60,8 @@ SFPResult lpc_digitalWrite(SFPFunction *msg);
 
 SFPResult lpc_digitalRead(SFPFunction *msg);
 
+SFPResult lpc_pulseIn(SFPFunction *msg);
+
 SFPResult lpc_attachInterrupt(SFPFunction *msg);
 
 SFPResult lpc_detachInterrupt(SFPFunction *msg);

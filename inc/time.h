@@ -38,13 +38,15 @@
 #define TIMER_STOP	0xFFFFFFFF
 #define TIMER_COUNT	16
 
+typedef uint32_t	time_ms_t;
+typedef uint32_t	time_us_t;
 typedef void (*TimerCallback)(void*);
 
 void Time_init(void);
 
-uint32_t Time_getSystemTime(void);
+time_ms_t Time_getSystemTime(void);
+time_us_t Time_getSystemTime_us(void);
 
-//void Time_setTimer1(uint32_t timeout, TimerCallback callback);
 void Time_addTimer(uint32_t timeout, TimerCallback callback, void *param);
 
 void Time_delay(uint32_t time); // Delay a number of milliseconds

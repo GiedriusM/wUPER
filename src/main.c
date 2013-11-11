@@ -96,6 +96,8 @@ int main(void) {
 	SFPServer_addFunctionHandler(spiritServer, WUPER_RF_FNAME_ATTACHINTERRUPT, WUPER_RF_FID_ATTACHINTERRUPT, lpc_attachInterrupt);
 	SFPServer_addFunctionHandler(spiritServer, WUPER_RF_FNAME_DETACHINTERRUPT, WUPER_RF_FID_DETACHINTERRUPT, lpc_detachInterrupt);
 
+	SFPServer_addFunctionHandler(spiritServer, WUPER_RF_FNAME_PULSEIN, WUPER_RF_FID_PULSEIN, lpc_pulseIn);
+
 	/* ADC functions */
 	SFPServer_addFunctionHandler(spiritServer, WUPER_RF_FNAME_ANALOGREAD, WUPER_RF_FID_ANALOGREAD, lpc_analogRead);
 

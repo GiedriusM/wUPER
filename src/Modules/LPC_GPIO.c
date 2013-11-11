@@ -225,6 +225,68 @@ SFPResult lpc_digitalRead(SFPFunction *msg) {
 	return SFP_OK;
 }
 
+SFPResult lpc_pulseIn(SFPFunction *msg) {
+	if (SFPFunction_getArgumentCount(msg) != 4) return SFP_ERR_ARG_COUNT;
+
+	if (SFPFunction_getArgumentType(msg, 0) != SFP_ARG_INT
+			|| SFPFunction_getArgumentType(msg, 1) != SFP_ARG_INT
+			|| SFPFunction_getArgumentType(msg, 2) != SFP_ARG_INT
+			|| SFPFunction_getArgumentType(msg, 3) != SFP_ARG_INT)
+		return SFP_ERR_ARG_TYPE;
+
+	uint8_t pin = SFPFunction_getArgument_int32(msg, 1);
+	uint8_t levelMask = (SFPFunction_getArgument_int32(msg, 2) == 0 ? 0 : 1);
+	uint32_t timeout = SFPFunction_getArgument_int32(msg, 3);
+
+	if (pin >= LPC_PIN_COUNT) return SFP_ERR_ARG_VALUE;
+
+	uint8_t port = 0;
+	uint8_t pinNum = LPC_PIN_IDS[pin];
+	if (pinNum > 23) {	// if not PIO0_0 to PIO0_23
+		port = 1;
+		pinNum -= 24;
+	}
+
+	levelMask <<= pinNum; // shift BIT0 to pin place
+
+	uint32_t startTimeUs = Time_getSystemTime_us();
+	uint32_t passedTimeUs = 0;
+
+	while ((LPC_GPIO->PIN[port] & (1 << pinNum)) == levelMask) {	// Wait while signal is on
+		if ((passedTimeUs=Time_getSystemTime_us()-startTimeUs) >= timeout)
+			break;
+	}
+
+	while ((LPC_GPIO->PIN[port] & (1 << pinNum)) != levelMask) { // Wait while signal is off
+		if ((passedTimeUs=Time_getSystemTime_us()-startTimeUs) >= timeout)
+			break;
+	}
+
+	uint32_t signalStartTime = Time_getSystemTime_us();
+
+	while ((LPC_GPIO->PIN[port] & (1 << pinNum)) == levelMask) {	// Wait while signal is on
+		if ((passedTimeUs=Time_getSystemTime_us()-startTimeUs) >= timeout)
+			break;
+	}
+	uint32_t signalDuration = Time_getSystemTime_us()-signalStartTime;
+
+	SFPFunction *outFunc = SFPFunction_new();
+
+	if (outFunc == NULL) return SFP_ERR_ALLOC_FAILED;
+
+	WUPER_SetDestinationAddress(SFPFunction_getArgument_int32(msg, 0));
+
+	SFPFunction_setType(outFunc, SFPFunction_getType(msg));
+	SFPFunction_setID(outFunc, WUPER_RF_FID_PULSEIN);
+	SFPFunction_setName(outFunc, WUPER_RF_FNAME_PULSEIN);
+	SFPFunction_addArgument_int32(outFunc, WUPER_GetDeviceAddress());
+	SFPFunction_addArgument_int32(outFunc, (passedTimeUs < timeout ? signalDuration : 0));
+	SFPFunction_send(outFunc, &spirit_stream);
+	SFPFunction_delete(outFunc);
+
+	return SFP_OK;
+}
+
 SFPResult lpc_attachInterrupt(SFPFunction *func) {
 	if (SFPFunction_getArgumentCount(func) != 4)
 		return SFP_ERR_ARG_COUNT;

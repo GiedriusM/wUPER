@@ -32,7 +32,8 @@
 
 #include "time.h"
 
-volatile uint32_t time_systime;
+volatile time_ms_t 	time_systime;
+volatile time_us_t 	time_systime_us;
 
 typedef struct {
 	uint32_t timeout;
@@ -42,11 +43,12 @@ typedef struct {
 
 volatile Timer_t time_timers[TIMER_COUNT];
 
-volatile uint32_t timer_delay;
-volatile uint32_t timer_countdown;
+volatile time_ms_t timer_delay;
+volatile time_ms_t timer_countdown;
 
-void SysTick_Handler() {
+void SysTick_Handler(void) {
 	time_systime++;
+	time_systime_us += 1000;
 	timer_delay--;
 
 	if (timer_countdown != TIMER_STOP) {
@@ -63,7 +65,7 @@ void SysTick_Handler() {
 	}
 }
 
-void Time_init() {
+void Time_init(void) {
 	time_systime = 0;
 
 	uint8_t i;
@@ -75,8 +77,14 @@ void Time_init() {
 	NVIC_SetPriority(SysTick_IRQn, 0);
 }
 
-uint32_t Time_getSystemTime() {
+time_ms_t Time_getSystemTime(void) {
 	return time_systime;
+}
+
+time_us_t Time_getSystemTime_us(void) {
+	//uint32_t deltaClocks = ((SystemCoreClock/1000 - 1) - SysTick->VAL);
+	uint32_t deltaClocks = ((48000 - 1) - SysTick->VAL);
+	return time_systime_us + ((deltaClocks*1365) >> 16); // This is equivalent to 1365/65536 ~= 1/48
 }
 
 void Time_addTimer(uint32_t timeout, TimerCallback callback, void *param) {
