@@ -32,8 +32,6 @@
 
 #include "WUPER/wuper.h"
 
-#include "SPIRIT_Config.h"
-
 #define XTAL_FREQUENCY	52000000
 #define CLOCK_FREQUENCY	26000000
 
@@ -148,6 +146,7 @@ void WUPER_SetResponsePacket(uint8_t data[16], uint32_t srcAddr, uint32_t dstAdd
 /*
  * Interrupt handler
  */
+// TODO: remove
 volatile SpiritIrqs tmpIrqs[32];
 volatile uint8_t  tmpStates[32];
 volatile uint32_t tmpCount  = 0;
@@ -422,17 +421,7 @@ void WUPER_Init(SFPStream *stream, uint32_t guid[4]) {
 	WUPER_SFP_rxBufferEncryptedEndPos = 0;
 	WUPER_SFP_rxBufferDiscardNextPacket = 0;
 
-	WUPER_settings.frequency = 868000000;
-	WUPER_settings.datarate = 500;
-	WUPER_settings.modulation.type = WUPER_MOD_FSK;
-	WUPER_settings.modulation.BT1 = 0;
-	WUPER_settings.modulation.whitening = 0;
-	WUPER_settings.modulation.fec = 0;
-	WUPER_settings.freqDev = 15000;
-	WUPER_settings.txPowerdBm = 11;
-	WUPER_settings.networkID = 0;
-	WUPER_settings.sendRetryCount = 2;
-	WUPER_settings.ackWaitTimeout = 5000;
+	WUPER_settings = WUPER_DEFAULT_SETTINGS;
 
 	WUPER_InitPins();
 
@@ -461,7 +450,7 @@ void WUPER_Restart(void) {
 	SpiritRadioSetXtalFrequency(XTAL_FREQUENCY);
 	SpiritGeneralSetSpiritVersion(SPIRIT_VERSION_3_0);
 
-	WUPER_SetRFSettings(&WUPER_settings);
+	WUPER_SetSettings(&WUPER_settings);
 
 	SpiritPktCommonSetTransmittedCtrlField(('0' << 24) | ('P' << 16) | ('F' << 8) | 'S');
 	SpiritPktCommonSetCtrlReference(('0' << 24) | ('P' << 16) | ('F' << 8) | 'S');
@@ -474,16 +463,6 @@ void WUPER_Restart(void) {
 	SpiritAesMode(S_ENABLE);
 	SpiritAesWriteKey(WUPER_settings.aesKey);
 
-	CsmaInit csmaInit = {
-		.xCsmaPersistentMode = S_DISABLE,
-		.xMultiplierTbit = TBIT_TIME_128,
-		.xCcaLength = TCCA_TIME_4,
-
-		.cMaxNb = 7,
-		.cBuPrescaler = 35, // 34,7kHz/35 -> BU about 1ms
-	};
-	SpiritCsmaInit(&csmaInit);
-	SpiritCsmaSeedReloadMode(S_DISABLE);
 	SpiritQiSetRssiThreshold(150);
 	SpiritQiSetCsMode(CS_MODE_STATIC_3DB);
 
@@ -743,7 +722,8 @@ void WUPER_Stream_writePacket(uint8_t *data, uint32_t len) {
 
 		// Enable CSMA
 		WUPER_csmaBackOffFlag = 0;
-		SpiritCsma(S_ENABLE);
+		if (WUPER_settings.advanced.csma.state == WUPER_ENABLED)
+			SpiritCsma(S_ENABLE);
 
 		// Send header
 		SpiritSpiWriteLinearFifo(16, tmpBuf); // Write header to TX FIFO
@@ -991,7 +971,7 @@ void WUPER_SetDestinationAddress(uint32_t addr) {
 	WUPER_destinationAddress = addr;
 }
 
-void WUPER_SetRFSettings(WUPERSettings *settings) {
+void WUPER_SetSettings(WUPERSettings *settings) {
 	WUPER_settings = *settings;
 
 	SpiritRefreshStatus();
@@ -1003,6 +983,7 @@ void WUPER_SetRFSettings(WUPERSettings *settings) {
 	SRadioInit spiritRadio;
 	PktBasicInit spiritBasicPacketInit;
 	PktBasicAddressesInit spiritBasicPacketAddresses;
+	CsmaInit csmaInit;
 
 	spiritRadio.lFrequencyBase = WUPER_settings.frequency;
 	spiritRadio.lDatarate = WUPER_settings.datarate;
@@ -1028,7 +1009,7 @@ void WUPER_SetRFSettings(WUPERSettings *settings) {
 	spiritBasicPacketInit.xFec = (WUPER_settings.modulation.fec ? S_ENABLE : S_DISABLE);
 	spiritBasicPacketInit.xDataWhitening = (WUPER_settings.modulation.whitening ? S_ENABLE : S_DISABLE);
 
-	// XXX: BUG! Device and broadcast address filter masks
+	// XXX: Spirit BUG! Device and broadcast address filter masks
 	// are interchanged (or their addresses)
 	spiritBasicPacketAddresses.xFilterOnMyAddress = S_DISABLE;
 	spiritBasicPacketAddresses.cMyAddress = WUPER_settings.networkID;
@@ -1036,6 +1017,16 @@ void WUPER_SetRFSettings(WUPERSettings *settings) {
 	spiritBasicPacketAddresses.cMulticastAddress = 0;
 	spiritBasicPacketAddresses.xFilterOnBroadcastAddress = S_ENABLE;
 	spiritBasicPacketAddresses.cBroadcastAddress = 0;
+
+	// CSMA config
+	csmaInit = (CsmaInit) {
+		.xCsmaPersistentMode = (WUPER_settings.advanced.csma.persistent ? S_ENABLE : S_DISABLE),
+		.xMultiplierTbit = WUPER_settings.advanced.csma.ccaPeriod,
+		.xCcaLength = WUPER_settings.advanced.csma.ccaCount << 4,
+
+		.cMaxNb = WUPER_settings.advanced.csma.backOffCount,
+		.cBuPrescaler = WUPER_settings.advanced.csma.backOffPrescaler, // 34,7kHz/35 -> BU about 1ms
+	};
 
 
 	// Send Spirit configuration
@@ -1049,12 +1040,15 @@ void WUPER_SetRFSettings(WUPERSettings *settings) {
 
 	SpiritAesWriteKey(WUPER_settings.aesKey);
 
+	SpiritCsmaInit(&csmaInit);
+	SpiritCsmaSeedReloadMode(S_DISABLE);
+
 	// Return to RX state if needed
 	if (spiritStatus.MC_STATE == MC_STATE_RX)
 		SpiritSpiCommandStrobes(COMMAND_RX);
 
 }
 
-void WUPER_GetRFSettings(WUPERSettings *settings) {
+void WUPER_GetSettings(WUPERSettings *settings) {
 	*settings = WUPER_settings;
 }

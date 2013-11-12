@@ -35,6 +35,8 @@
 
 #include "main.h"
 
+#include "SPIRIT_Config.h"
+
 #define WUPER_PROTOCOL_VERSION		'0'
 #define WUPER_MAX_NODE_COUNT		16
 
@@ -44,6 +46,11 @@
 #define WUPER_FLAG_ACK		1
 #define WUPER_FLAG_SETSEQ	2
 #define WUPER_FLAG_SEQERR	3
+
+typedef enum {
+	WUPER_DISABLED = 0,
+	WUPER_ENABLED = 1
+} WUPERState;
 
 typedef enum {
 	WUPER_OK = 0,
@@ -67,8 +74,8 @@ typedef struct {
 		enum { WUPER_MOD_FSK=0, WUPER_MOD_GFSK=1 } type:3;
 		uint8_t BT1:1;
 		uint8_t reserved:2;
-		uint8_t whitening:1;
-		uint8_t fec:1;
+		WUPERState whitening:1;
+		WUPERState fec:1;
 	} modulation;
 	uint32_t freqDev;
 
@@ -80,7 +87,46 @@ typedef struct {
 
 	uint32_t sendRetryCount;
 	uint32_t ackWaitTimeout;
+
+	struct {
+		struct {
+			WUPERState state:1;
+			WUPERState persistent:1;
+
+			uint8_t ccaPeriod:2;
+			uint8_t ccaCount:4;
+
+			uint8_t backOffPrescaler:6;
+			uint8_t backOffCount:3;
+		} csma;
+	} advanced;
 } WUPERSettings;
+
+static const WUPERSettings WUPER_DEFAULT_SETTINGS = {
+	.frequency = 868000000,
+	.datarate = 500,
+	.modulation = {
+		.type = WUPER_MOD_FSK,
+		.BT1 = 0,
+		.whitening = 0,
+		.fec = 0
+	},
+	.freqDev = 15000,
+	.txPowerdBm = 11,
+	.networkID = 0,
+	.aesKey = { 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 },
+	.sendRetryCount = 2,
+	.ackWaitTimeout = 5000,
+
+	.advanced.csma = {
+		.state = WUPER_ENABLED,
+		.persistent = WUPER_DISABLED,
+		.ccaPeriod = 1, // 64bits * 2^1 = 128bits
+		.ccaCount = 4,
+		.backOffPrescaler = 35, // 34,7kHz/35 -> BU about 1ms
+		.backOffCount = 7
+	},
+};
 
 
 void WUPER_Init(SFPStream *stream, uint32_t guid[4]);
@@ -92,8 +138,8 @@ void	 	WUPER_GetTrafficStatistics(WUPERTrafficStatistics *stats);
 void		WUPER_ClearTrafficStatistics(void);
 
 void 		WUPER_SetDestinationAddress(uint32_t addr);
-void 		WUPER_SetRFSettings(WUPERSettings *settings);
-void 		WUPER_GetRFSettings(WUPERSettings *settings);
+void 		WUPER_SetSettings(WUPERSettings *settings);
+void 		WUPER_GetSettings(WUPERSettings *settings);
 
 WUPERResult WUPER_AddNode(uint32_t addr);
 WUPERResult WUPER_DeleteNode(uint32_t addr);

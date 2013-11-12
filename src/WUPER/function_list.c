@@ -166,7 +166,7 @@ SFPResult ClearTrafficInfoCallback(SFPFunction *func) {
 }
 
 SFPResult SetRFParamsCallback(SFPFunction *func) {
-	if (SFPFunction_getArgumentCount(func) != 9) return SFP_ERR_ARG_COUNT;
+	if (SFPFunction_getArgumentCount(func) != 10) return SFP_ERR_ARG_COUNT;
 
 	if (SFPFunction_getArgumentType(func, 0) != SFP_ARG_INT
 			|| SFPFunction_getArgumentType(func, 1) != SFP_ARG_INT
@@ -176,34 +176,61 @@ SFPResult SetRFParamsCallback(SFPFunction *func) {
 			|| SFPFunction_getArgumentType(func, 5) != SFP_ARG_INT
 			|| SFPFunction_getArgumentType(func, 6) != SFP_ARG_INT
 			|| SFPFunction_getArgumentType(func, 7) != SFP_ARG_INT
-			|| SFPFunction_getArgumentType(func, 8) != SFP_ARG_BYTE_ARRAY)
+			|| SFPFunction_getArgumentType(func, 8) != SFP_ARG_BYTE_ARRAY
+			|| SFPFunction_getArgumentType(func, 9) != SFP_ARG_INT)
 		return SFP_ERR_ARG_TYPE;
 
-	// Load parameters
-	WUPERSettings settings = {
-			.frequency = SFPFunction_getArgument_int32(func, 0),
-			.datarate = SFPFunction_getArgument_int32(func, 1),
-			.modulation =  { SFPFunction_getArgument_int32(func, 2) },
-			.freqDev = SFPFunction_getArgument_int32(func, 3),
-			.txPowerdBm = SFPFunction_getArgument_int32(func, 4),
-			.networkID = SFPFunction_getArgument_int32(func, 5),
-			.sendRetryCount = SFPFunction_getArgument_int32(func, 6),
-			.ackWaitTimeout = SFPFunction_getArgument_int32(func, 7)
-	};
+	uint32_t frequency = SFPFunction_getArgument_int32(func, 0);
+	uint32_t datarate = SFPFunction_getArgument_int32(func, 1);
+	uint32_t modulation = SFPFunction_getArgument_int32(func, 2);
+	uint32_t freqDev = SFPFunction_getArgument_int32(func, 3);
+	int8_t txPowerdBm = SFPFunction_getArgument_int32(func, 4);
+	uint8_t networkID = SFPFunction_getArgument_int32(func, 5);
+	uint32_t sendRetryCount = SFPFunction_getArgument_int32(func, 6);
+	uint32_t ackWaitTimeout = SFPFunction_getArgument_int32(func, 7);
 
 	uint32_t size = 0;
 	uint8_t *key = SFPFunction_getArgument_barray(func, 8, &size);
+
+	uint32_t csmaConfig = SFPFunction_getArgument_int32(func, 9);
+
+	// Check values
+	if (size != 16) return SFP_ERR_ARG_VALUE;
+
+	// Load parameters
+	WUPERSettings settings = {
+			.frequency = frequency,
+			.datarate = datarate,
+			.modulation =  {
+				.type = modulation & 0x7,
+				.BT1 = (modulation & BIT3 ? 1 : 0),
+				.whitening = (modulation & BIT6 ? WUPER_ENABLED : WUPER_DISABLED),
+				.fec = (modulation & BIT7 ? WUPER_ENABLED : WUPER_DISABLED)
+			},
+			.freqDev = freqDev,
+			.txPowerdBm = txPowerdBm,
+			.networkID = networkID,
+			.sendRetryCount = sendRetryCount,
+			.ackWaitTimeout = ackWaitTimeout,
+			.advanced.csma = {
+				.state = (csmaConfig & BIT7 ? WUPER_ENABLED : WUPER_DISABLED),
+				.persistent = (csmaConfig & BIT6 ? WUPER_ENABLED : WUPER_DISABLED),
+
+				.ccaPeriod = (csmaConfig >> 4) & 0x3,
+				.ccaCount = csmaConfig & 0xF,
+
+				.backOffPrescaler = (csmaConfig >> 8) & 0x3F,
+				.backOffCount = (csmaConfig >> 16) & 0x7,
+			}
+	};
 
 	uint8_t i;
 	for (i=0; i<16; i++) {
 		settings.aesKey[i] = key[i];
 	}
 
-	// Check values
-	if (size != 16) return SFP_ERR_ARG_VALUE;
-
 	// Set parameters
-	WUPER_SetRFSettings(&settings);
+	WUPER_SetSettings(&settings);
 
 	return SFP_OK;
 }
@@ -216,7 +243,7 @@ SFPResult GetRFParamsCallback(SFPFunction *func) {
 	if (outFunc == NULL) return SFP_ERR_ALLOC_FAILED;
 
 	WUPERSettings settings = {0};
-	WUPER_GetRFSettings(&settings);
+	WUPER_GetSettings(&settings);
 
 	SFPFunction_setType(outFunc, SFPFunction_getType(func));
 	SFPFunction_setName(outFunc, WUPER_CDC_FNAME_GETRFPARAMS);
@@ -229,6 +256,13 @@ SFPResult GetRFParamsCallback(SFPFunction *func) {
 	SFPFunction_addArgument_int32(outFunc, settings.networkID);
 	SFPFunction_addArgument_int32(outFunc, settings.sendRetryCount);
 	SFPFunction_addArgument_int32(outFunc, settings.ackWaitTimeout);
+	uint32_t csma_config = (settings.advanced.csma.backOffCount << 16)
+			| (settings.advanced.csma.backOffPrescaler << 8)
+			| (settings.advanced.csma.state << 7)
+			| (settings.advanced.csma.persistent << 6)
+			| (settings.advanced.csma.ccaPeriod << 4)
+			| (settings.advanced.csma.ccaCount);
+	SFPFunction_addArgument_int32(outFunc, csma_config);
 
 	SFPFunction_send(outFunc, &stream);
 	SFPFunction_delete(outFunc);

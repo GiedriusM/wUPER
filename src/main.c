@@ -243,7 +243,7 @@ uint8_t System_loadSettings(void) {
 	// RF Settings
 	WUPERSettings wuperSettings = { 0 };
 	IAP_ReadEEPROM(EEPROM_ADDR_RFSETTINGS, (uint8_t*)&wuperSettings, sizeof(WUPERSettings));
-	WUPER_SetRFSettings(&wuperSettings);
+	WUPER_SetSettings(&wuperSettings);
 
 	// Nodes
 	uint8_t nNodes = 0;
@@ -272,7 +272,7 @@ uint8_t System_saveSettings(void) {
 
 	// Save RF settings
 	WUPERSettings wuperSettings = { 0 };
-	WUPER_GetRFSettings(&wuperSettings);
+	WUPER_GetSettings(&wuperSettings);
 	IAP_WriteEEPROM(EEPROM_ADDR_RFSETTINGS, (uint8_t*)&wuperSettings, sizeof(WUPERSettings));
 
 	// Save nodes
