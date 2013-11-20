@@ -79,7 +79,12 @@ typedef struct {
 	} modulation;
 	uint32_t freqDev;
 
-	int8_t txPowerdBm;
+	struct {
+		enum { WUPER_TX_MODE_STATIC=0, WUPER_TX_MODE_DYNAMIC=0x80 } mode:8;
+		uint8_t rssiMin:8;
+		uint8_t rssiMax:8;
+		int8_t txPowerdBm:8;
+	} txMode;
 
 	uint8_t networkID;
 
@@ -112,7 +117,12 @@ static const WUPERSettings WUPER_DEFAULT_SETTINGS = {
 		.fec = 0
 	},
 	.freqDev = 15000,
-	.txPowerdBm = 11,
+	.txMode = {
+		.mode = WUPER_TX_MODE_STATIC,
+		.rssiMin = 155,
+		.rssiMax = 170,
+		.txPowerdBm = 11,
+	},
 	.networkID = 0,
 	.aesKey = { 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 },
 	.sendRetryCount = 2,

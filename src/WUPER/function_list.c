@@ -184,7 +184,7 @@ SFPResult SetRFParamsCallback(SFPFunction *func) {
 	uint32_t datarate = SFPFunction_getArgument_int32(func, 1);
 	uint32_t modulation = SFPFunction_getArgument_int32(func, 2);
 	uint32_t freqDev = SFPFunction_getArgument_int32(func, 3);
-	int8_t txPowerdBm = SFPFunction_getArgument_int32(func, 4);
+	uint32_t txMode = SFPFunction_getArgument_int32(func, 4);
 	uint8_t networkID = SFPFunction_getArgument_int32(func, 5);
 	uint32_t sendRetryCount = SFPFunction_getArgument_int32(func, 6);
 	uint32_t ackWaitTimeout = SFPFunction_getArgument_int32(func, 7);
@@ -208,7 +208,12 @@ SFPResult SetRFParamsCallback(SFPFunction *func) {
 				.fec = (modulation & BIT7 ? WUPER_ENABLED : WUPER_DISABLED)
 			},
 			.freqDev = freqDev,
-			.txPowerdBm = txPowerdBm,
+			.txMode = {
+				.mode = txMode >> 24,
+				.rssiMin = (txMode >> 16) & 0xFF,
+				.rssiMax = (txMode >> 8) & 0xFF,
+				.txPowerdBm = txMode & 0xFF,
+			},
 			.networkID = networkID,
 			.sendRetryCount = sendRetryCount,
 			.ackWaitTimeout = ackWaitTimeout,
@@ -252,7 +257,11 @@ SFPResult GetRFParamsCallback(SFPFunction *func) {
 	SFPFunction_addArgument_int32(outFunc, settings.datarate);
 	SFPFunction_addArgument_int32(outFunc, *((uint8_t*)&settings.modulation));
 	SFPFunction_addArgument_int32(outFunc, settings.freqDev);
-	SFPFunction_addArgument_int32(outFunc, settings.txPowerdBm);
+	SFPFunction_addArgument_int32(outFunc,
+			(settings.txMode.mode << 24) |
+			(settings.txMode.rssiMin << 16) |
+			(settings.txMode.rssiMax << 8) |
+			(settings.txMode.txPowerdBm & 0xFF));
 	SFPFunction_addArgument_int32(outFunc, settings.networkID);
 	SFPFunction_addArgument_int32(outFunc, settings.sendRetryCount);
 	SFPFunction_addArgument_int32(outFunc, settings.ackWaitTimeout);

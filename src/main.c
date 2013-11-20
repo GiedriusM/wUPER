@@ -49,6 +49,24 @@ SFPResult LedCallback(SFPFunction *msg) {
 	return SFP_OK;
 }
 
+
+SFPResult TestCallback(SFPFunction *msg) {
+	uint8_t txLevel = SpiritRadioGetPALevel(0);
+
+	SFPFunction *outFunc = SFPFunction_new();
+
+	if (outFunc == NULL) return SFP_ERR_ALLOC_FAILED;
+
+	WUPER_SetDestinationAddress(SFPFunction_getArgument_int32(msg, 0));
+
+	SFPFunction_setType(outFunc, SFP_FUNC_TYPE_TEXT);
+	SFPFunction_setName(outFunc, "test");
+	SFPFunction_addArgument_int32(outFunc, txLevel);
+	SFPFunction_send(outFunc, &stream);
+	SFPFunction_delete(outFunc);
+	return SFP_OK;
+}
+
 int main(void) {
 	SystemCoreClockUpdate();
 
@@ -162,6 +180,8 @@ int main(void) {
 		SFPServer_addFunctionHandler(cdcServer, WUPER_CDC_FNAME_GETSYSSETTINGS,	WUPER_CDC_FID_GETSYSSETTINGS, GetSystemSettingsCallback);
 
 		SFPServer_addFunctionHandler(cdcServer, WUPER_CDC_FNAME_GETDEVINFO,	WUPER_CDC_FID_GETDEVINFO, lpc_system_getDeviceInfo);
+
+		SFPServer_addFunctionHandler(cdcServer, "test",	123, TestCallback);
 
 		SFPServer_setDefaultFunctionHandler(cdcServer, CDCDefaultCallback);
 

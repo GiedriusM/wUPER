@@ -150,6 +150,7 @@ void WUPER_SetResponsePacket(uint8_t data[16], uint32_t srcAddr, uint32_t dstAdd
 volatile SpiritIrqs tmpIrqs[32];
 volatile uint8_t  tmpStates[32];
 volatile uint32_t tmpCount  = 0;
+volatile uint16_t tmpCountMarker = 0;
 void FLEX_INT7_IRQHandler() {
 	NVIC_DisableIRQ(FLEX_INT7_IRQn);
 
@@ -315,6 +316,20 @@ void FLEX_INT7_IRQHandler() {
 						node->status = WUPER_NODE_STATUS_CONNECTED;
 						node->outSignalIndicator = decryptedHeader.reserved;
 						WUPER_txState = WUPER_TX_RECEIVED_ACK;
+
+#ifdef WUPER_NODE
+						if (WUPER_settings.txMode.mode == WUPER_TX_MODE_DYNAMIC) {
+							uint8_t txLevel = SpiritRadioGetPALevel(0);
+
+							if (node->outSignalIndicator < WUPER_settings.txMode.rssiMin) {
+								if (txLevel > 1)
+									SpiritRadioSetPALevel(0, txLevel-1); // increase power
+								//SpiritRadioSetPALevel(0, 1); // Set max power
+							} else if (node->outSignalIndicator > WUPER_settings.txMode.rssiMax) {
+								SpiritRadioSetPALevel(0, txLevel+1); // decrease power
+							}
+						}
+#endif
 					}
 
 				} else if (decryptedHeader.flags == WUPER_FLAG_SEQERR) {
@@ -323,6 +338,11 @@ void FLEX_INT7_IRQHandler() {
 
 					if ((WUPER_txState == WUPER_TX_WAITING_ACK)
 							&& (decryptedHeader.sequenceID == node->sequenceID)) {
+#ifdef WUPER_NODE
+						if (WUPER_settings.txMode.mode == WUPER_TX_MODE_DYNAMIC) {
+							SpiritRadioSetPALevel(0, 1); // Set max power
+						}
+#endif
 						node->status = WUPER_NODE_STATUS_SETSEQ;
 						WUPER_SetResponsePacket(tmpBuf, WUPER_deviceAddress, decryptedHeader.srcAddress,
 										WUPER_PROTOCOL_VERSION, WUPER_FLAG_SETSEQ,
@@ -680,7 +700,7 @@ void WUPER_Stream_writePacket(uint8_t *data, uint32_t len) {
 	trafficStatistics.packetSendTotal++;
 
 	WUPER_txState = WUPER_TX_SENDING;
-
+tmpCountMarker = tmpCount;
 	uint8_t retriesLeft = WUPER_settings.sendRetryCount;
 	do {
 		do {
@@ -788,7 +808,15 @@ void WUPER_Stream_writePacket(uint8_t *data, uint32_t len) {
 			trafficStatistics.packetSendSuccess++;
 			break;
 		}
+
 		trafficStatistics.packetSendRetry++;
+
+#ifdef WUPER_NODE
+		if (WUPER_settings.txMode.mode == WUPER_TX_MODE_DYNAMIC) {
+			SpiritRadioSetPALevel(0, 1); // Set max power
+		}
+#endif
+
 	} while (retriesLeft--);
 
 	WUPER_txState = WUPER_TX_INACTIVE;
@@ -993,7 +1021,7 @@ void WUPER_SetSettings(WUPERSettings *settings) {
 		spiritRadio.xModulationSelect = FSK;
 	}
 	spiritRadio.lFreqDev = WUPER_settings.freqDev;
-	spiritRadio.lBandwidth = 150000;
+	spiritRadio.lBandwidth = 550000;
 	spiritRadio.cChannelNumber = 0;
 	spiritRadio.nChannelSpace = 300000;
 	spiritRadio.nXtalOffsetPpm = 0; // TODO: calculate xtal offset
@@ -1031,7 +1059,7 @@ void WUPER_SetSettings(WUPERSettings *settings) {
 
 	// Send Spirit configuration
 	SpiritRadioInit(&spiritRadio); // XXX: WCP value is incorrect (according to datasheet)
-	SpiritRadioSetPALeveldBm(0, WUPER_settings.txPowerdBm);
+	SpiritRadioSetPALeveldBm(0, WUPER_settings.txMode.txPowerdBm);
 	SpiritRadioSetPALevelMaxIndex(0);
 
 	SpiritPktBasicInit(&spiritBasicPacketInit);
