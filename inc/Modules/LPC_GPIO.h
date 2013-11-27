@@ -36,7 +36,7 @@
 #include "main.h"
 
 #define LPC_PIN_COUNT	34
-#define LPC_INTERRUPT_COUNT 7
+#define LPC_INTERRUPT_COUNT 6
 
 void FLEX_INT0_IRQHandler(void);
 void FLEX_INT1_IRQHandler(void);
@@ -44,7 +44,6 @@ void FLEX_INT2_IRQHandler(void);
 void FLEX_INT3_IRQHandler(void);
 void FLEX_INT4_IRQHandler(void);
 void FLEX_INT5_IRQHandler(void);
-void FLEX_INT6_IRQHandler(void);
 
 void GPIO_handleInterrupts(void);
 

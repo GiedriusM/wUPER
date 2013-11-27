@@ -451,7 +451,3 @@ void FLEX_INT4_IRQHandler() {
 void FLEX_INT5_IRQHandler() {
 	GPIO_registerInterrupt(5);
 }
-
-void FLEX_INT6_IRQHandler() {
-	GPIO_registerInterrupt(6);
-}

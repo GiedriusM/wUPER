@@ -43,6 +43,13 @@
 
 static volatile uint32_t System_powerSaveStart;
 
+/* USB power interrupt */
+void FLEX_INT6_IRQHandler() {
+	if (LPC_GPIO_PIN_INT->IST & (1<<6)) {
+		NVIC_SystemReset();
+	}
+}
+
 SFPResult LedCallback(SFPFunction *msg) {
 	LPC_GPIO->NOT[0] |= BIT7;
 
@@ -92,17 +99,40 @@ int main(void) {
 	LPC_GPIO->DIR[0] |= BIT7;
 	LPC_GPIO->CLR[0] |= BIT7;
 
+	System_mode = SYSTEM_MODE_ACTIVE;
+
+#ifdef WUPER_NODE
+	// Configure USB sense pin + interrupt
+	LPC_IOCON->PIO0_3 &= ~0x1F;
+	LPC_IOCON->PIO0_3 |= (1 << 3)|(1 << 0);	/* Secondary function VBUS */
+	LPC_GPIO->DIR[0] &= ~(1 << 3);		// input
+	Time_delay(10); // XXX: this solves stabilization issue where interrupt happens immediately
+	NVIC_DisableIRQ(FLEX_INT6_IRQn);	// Disable interrupt
+	LPC_SYSCON->PINTSEL[6] = 0+3; 	// select which pin will cause the interrupts
+	LPC_GPIO_PIN_INT->ISEL &= ~(1 << 6);// Set edge sensitive mode
+	LPC_GPIO_PIN_INT->IENR |= (1 << 6);	// Enable rising edge.
+	LPC_GPIO_PIN_INT->IENF |= (1 << 6);	// Enable falling edge.
+	LPC_GPIO_PIN_INT->RISE = (1 << 6);	// Clear rising edge flag
+	LPC_GPIO_PIN_INT->FALL = (1 << 6);	// Clear falling edge flag
+	NVIC_EnableIRQ(FLEX_INT6_IRQn);		// Enable interrupt
+
+	// Check current USB state
+	if (!(LPC_GPIO->PIN[0] & (1 << 3))) { // If no Vcc on PIO0_3
+		System_mode = SYSTEM_MODE_POWER_SAVE;
+	}
+#endif
+
 	System_powerSaveTimeout = 5000; // 5 seconds
 	System_powerDownTimeout = 10; // 10 seconds
 
 	/* Initialize Spirit side */
 	WUPER_Init(&spirit_stream, GUID);
-	uint8_t settingsLoaded = System_loadSettings();
+	System_loadSettings();
 
+	/* Spirit SFP server initialization*/
 	SFPServer *spiritServer = SFPServer_new(&spirit_stream);
 
 #ifdef WUPER_NODE
-	/* Spirit SFP server initialization*/
 	/* GPIO/Pin functions */
 	SFPServer_addFunctionHandler(spiritServer, WUPER_RF_FNAME_SETPRIMARY,	WUPER_RF_FID_SETPRIMARY,	lpc_config_setPrimary);
 	SFPServer_addFunctionHandler(spiritServer, WUPER_RF_FNAME_SETSECONDARY, WUPER_RF_FID_SETSECONDARY,	lpc_config_setSecondary);
@@ -145,13 +175,6 @@ int main(void) {
 
 	SFPServer_setDefaultFunctionHandler(spiritServer, SpiritDefaultCallback);
 
-#ifdef WUPER_NODE
-	System_mode = SYSTEM_MODE_POWER_SAVE;
-
-	if (!settingsLoaded) {
-		System_mode = SYSTEM_MODE_ACTIVE;
-	}
-
 
 	if (System_mode == SYSTEM_MODE_ACTIVE) {
 		/* Initialize CDC  */
@@ -174,10 +197,13 @@ int main(void) {
 		SFPServer_addFunctionHandler(cdcServer, WUPER_CDC_FNAME_GETNODEINFO,WUPER_CDC_FID_GETNODEINFO,	GetNodeInfoCallback);
 
 		SFPServer_addFunctionHandler(cdcServer, WUPER_CDC_FNAME_SAVESETTINGS, WUPER_CDC_FID_SAVESETTINGS, SaveSettingsCallback);
+
+#ifdef WUPER_NODE
 		SFPServer_addFunctionHandler(cdcServer, WUPER_CDC_FNAME_ENTERPOWERSAVE, WUPER_CDC_FID_ENTERPOWERSAVE, EnterPowerSaveCallback);
 
 		SFPServer_addFunctionHandler(cdcServer, WUPER_CDC_FNAME_SETSYSSETTINGS,	WUPER_CDC_FID_SETSYSSETTINGS, SetSystemSettingsCallback);
 		SFPServer_addFunctionHandler(cdcServer, WUPER_CDC_FNAME_GETSYSSETTINGS,	WUPER_CDC_FID_GETSYSSETTINGS, GetSystemSettingsCallback);
+#endif
 
 		SFPServer_addFunctionHandler(cdcServer, WUPER_CDC_FNAME_GETDEVINFO,	WUPER_CDC_FID_GETDEVINFO, lpc_system_getDeviceInfo);
 
@@ -186,9 +212,11 @@ int main(void) {
 		SFPServer_setDefaultFunctionHandler(cdcServer, CDCDefaultCallback);
 
 		while (System_mode == SYSTEM_MODE_ACTIVE) {
+#ifdef WUPER_NODE
+			GPIO_handleInterrupts();
+#endif
 			SFPServer_cycle(cdcServer);
 			SFPServer_cycle(spiritServer);
-			GPIO_handleInterrupts();
 		}
 
 		SFPServer_delete(cdcServer);
@@ -199,7 +227,7 @@ int main(void) {
 
 	while (1) {
 		System_resetPowerSaveTimeout();
-		while (Time_getSystemTime()-System_powerSaveStart < System_powerSaveTimeout) { // 15seconds
+		while (Time_getSystemTime()-System_powerSaveStart < System_powerSaveTimeout) {
 			/* Interrupt part */
 			if (LPC_SYSCON->SYSRSTSTAT & 0x1F) { // System reset
 				System_sendInterrupt(SYSTEM_INTERRUPT_RESET, LPC_SYSCON->SYSRSTSTAT & 0x1F, 0);
@@ -210,43 +238,8 @@ int main(void) {
 			/* Processing part */
 			SFPServer_cycle(spiritServer);
 		}
-		System_enterPowerDown(System_powerDownTimeout); //5 seconds
+		System_enterPowerDown(System_powerDownTimeout);
 	}
-
-#else
-
-	/* Initialize CDC side */
-	CDC_Init(&stream, GUID);
-
-	/* SFP initialization, configuration and launch */
-	SFPServer *cdcServer = SFPServer_new(&stream);
-
-	/* CDC SFP server initialization */
-	SFPServer_addFunctionHandler(cdcServer, WUPER_CDC_FNAME_GETDEVADDRESS,	WUPER_CDC_FID_GETDEVADDRESS,	GetDeviceAddrCallback);
-	SFPServer_addFunctionHandler(cdcServer, WUPER_CDC_FNAME_GETTRAFFICINFO,	WUPER_CDC_FID_GETTRAFFICINFO,	GetTrafficInfoCallback);
-	SFPServer_addFunctionHandler(cdcServer, WUPER_CDC_FNAME_CLEARTRAFFICINFO,	WUPER_CDC_FID_CLEARTRAFFICINFO,	ClearTrafficInfoCallback);
-	SFPServer_addFunctionHandler(cdcServer, WUPER_CDC_FNAME_SETRFPARAMS,WUPER_CDC_FID_SETRFPARAMS,	SetRFParamsCallback);
-	SFPServer_addFunctionHandler(cdcServer, WUPER_CDC_FNAME_GETRFPARAMS,WUPER_CDC_FID_GETRFPARAMS,	GetRFParamsCallback);
-	SFPServer_addFunctionHandler(cdcServer, WUPER_CDC_FNAME_PING,		WUPER_CDC_FID_PING,			PingSendCallback);
-
-	SFPServer_addFunctionHandler(cdcServer, WUPER_CDC_FNAME_ADDNODE,	WUPER_CDC_FID_ADDNODE,		AddNodeCallback);
-	SFPServer_addFunctionHandler(cdcServer, WUPER_CDC_FNAME_DELNODE,	WUPER_CDC_FID_DELNODE,		DelNodeCallback);
-	SFPServer_addFunctionHandler(cdcServer, WUPER_CDC_FNAME_CLRNODES,	WUPER_CDC_FID_CLRNODES,		ClearNodesCallback);
-	SFPServer_addFunctionHandler(cdcServer, WUPER_CDC_FNAME_GETNODES,	WUPER_CDC_FID_GETNODES,		GetNodesCallback);
-	SFPServer_addFunctionHandler(cdcServer, WUPER_CDC_FNAME_GETNODEINFO,WUPER_CDC_FID_GETNODEINFO,	GetNodeInfoCallback);
-
-	SFPServer_addFunctionHandler(cdcServer, WUPER_CDC_FNAME_SAVESETTINGS, WUPER_CDC_FID_SAVESETTINGS, SaveSettingsCallback);
-
-	SFPServer_addFunctionHandler(cdcServer, WUPER_CDC_FNAME_GETDEVINFO,	WUPER_CDC_FID_GETDEVINFO, lpc_system_getDeviceInfo);
-
-	SFPServer_setDefaultFunctionHandler(cdcServer, CDCDefaultCallback);
-
-
-	while (1) {
-		SFPServer_cycle(cdcServer);
-		SFPServer_cycle(spiritServer);
-	}
-#endif
 
 }
 
