@@ -32,8 +32,8 @@
 
 #include "time.h"
 
-volatile time_ms_t 	time_systime;
-volatile time_us_t 	time_systime_us;
+static volatile time_ms_t 	time_systime;
+static volatile time_us_t 	time_systime_us;
 
 typedef struct {
 	uint32_t timeout;
@@ -41,10 +41,10 @@ typedef struct {
 	void* callbackParam;
 } Timer_t;
 
-volatile Timer_t time_timers[TIMER_COUNT];
+static volatile Timer_t time_timers[TIMER_COUNT];
 
-volatile time_ms_t timer_delay;
-volatile time_ms_t timer_countdown;
+static volatile time_ms_t timer_delay;
+static volatile time_ms_t timer_countdown;
 
 void SysTick_Handler(void) {
 	time_systime++;

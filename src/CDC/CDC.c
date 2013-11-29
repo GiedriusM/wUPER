@@ -60,30 +60,30 @@ void 	 CDC_Stream_flush(void);
 void USB_pin_clk_init(void);
 
 /* Private variables */
-USBD_API_T   *pUsbApi;
-USBD_HANDLE_T pUsbHandle;
+static USBD_API_T   *pUsbApi;
+static USBD_HANDLE_T pUsbHandle;
 
-uint8_t tmpRxBuf[USB_HS_MAX_BULK_PACKET];
-uint8_t tmpTxBuf[USB_HS_MAX_BULK_PACKET];
+static uint8_t tmpRxBuf[USB_HS_MAX_BULK_PACKET];
+static uint8_t tmpTxBuf[USB_HS_MAX_BULK_PACKET];
 
 /* SFP variables */
 #define CDC_SFP_RX_BUFFER_SIZE_N	7
 #define CDC_SFP_RX_BUFFER_MASK		((1 << CDC_SFP_RX_BUFFER_SIZE_N) - 1)
-volatile uint8_t  CDC_SFP_rxBuffer[1 << CDC_SFP_RX_BUFFER_SIZE_N];
-volatile uint32_t CDC_SFP_rxBufferWritePos;
-volatile uint32_t CDC_SFP_rxBufferReadPos;
+static volatile uint8_t  CDC_SFP_rxBuffer[1 << CDC_SFP_RX_BUFFER_SIZE_N];
+static volatile uint32_t CDC_SFP_rxBufferWritePos;
+static volatile uint32_t CDC_SFP_rxBufferReadPos;
 
 #define CDC_SFP_rxBufferAvailable()  ((CDC_SFP_rxBufferWritePos-CDC_SFP_rxBufferReadPos) & CDC_SFP_RX_BUFFER_MASK)
 #define CDC_SFP_rxBufferFree()       ((CDC_SFP_rxBufferReadPos-1-CDC_SFP_rxBufferWritePos) & CDC_SFP_RX_BUFFER_MASK)
 
-volatile uint8_t CDC_SFP_rxPending;
-volatile uint8_t CDC_SFP_txReady;
+static volatile uint8_t CDC_SFP_rxPending;
+static volatile uint8_t CDC_SFP_txReady;
 
 #define CDC_SFP_TX_BUFFER_SIZE_N	7
 #define CDC_SFP_TX_BUFFER_MASK		((1 << CDC_SFP_TX_BUFFER_SIZE_N) - 1)
-volatile uint8_t  CDC_SFP_txBuffer[1 << CDC_SFP_TX_BUFFER_SIZE_N];
-volatile uint32_t CDC_SFP_txBufferWritePos;
-volatile uint32_t CDC_SFP_txBufferReadPos;
+static volatile uint8_t  CDC_SFP_txBuffer[1 << CDC_SFP_TX_BUFFER_SIZE_N];
+static volatile uint32_t CDC_SFP_txBufferWritePos;
+static volatile uint32_t CDC_SFP_txBufferReadPos;
 
 #define CDC_SFP_txBufferAvailable()  ((CDC_SFP_txBufferWritePos-CDC_SFP_txBufferReadPos) & CDC_SFP_TX_BUFFER_MASK)
 #define CDC_SFP_txBufferFree()       ((CDC_SFP_txBufferReadPos-1-CDC_SFP_txBufferWritePos) & CDC_SFP_TX_BUFFER_MASK)
