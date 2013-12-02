@@ -54,6 +54,8 @@ volatile static enum {
 	WUPER_AES_ENCRYPTING_RESPONSE=4
 } WUPER_AESState;
 
+volatile static uint8_t WUPER_lastCipher[16];
+
 volatile static struct {
 	uint32_t srcAddress;
 	uint32_t dstAddress;
@@ -108,13 +110,13 @@ static volatile uint8_t WUPER_SFP_rxBufferDiscardNextPacket;
 #define WUPER_SFP_rxBufferTmpFree()    ((WUPER_SFP_rxBufferReadPos-1-WUPER_SFP_rxBufferWritePos) & WUPER_SFP_RX_BUFFER_MASK)
 #define WUPER_SFP_rxBufferEncryptedAvailable() ((WUPER_SFP_rxBufferEncryptedEndPos-WUPER_SFP_rxBufferDecryptPos) & WUPER_SFP_RX_BUFFER_MASK)
 
-static void WUPER_rxBufferGetData(uint8_t *data, uint32_t pos, uint32_t len) {
+static void WUPER_rxBufferGetData(volatile uint8_t *data, uint32_t pos, uint32_t len) {
 	while (len--) {
 		*data++ = WUPER_SFP_rxBuffer[pos++ & WUPER_SFP_RX_BUFFER_MASK];
 	}
 }
 
-static void WUPER_rxBufferPutData(uint8_t *data, uint32_t pos, uint32_t len) {
+static void WUPER_rxBufferPutData(volatile uint8_t *data, uint32_t pos, uint32_t len) {
 	while (len--) {
 		WUPER_SFP_rxBuffer[pos++ & WUPER_SFP_RX_BUFFER_MASK] = *data++;
 	}
@@ -260,6 +262,7 @@ void FLEX_INT7_IRQHandler() {
 		} else if (WUPER_AESState == WUPER_AES_DECRYPTING_HEADER) {
 			uint8_t tmpBuf[16];
 			SpiritAesReadDataOut(tmpBuf, 16);
+			WUPER_rxBufferGetData(WUPER_lastCipher, WUPER_SFP_rxBufferDecryptPos, 16);
 			WUPER_SFP_rxBufferDecryptPos += 16;
 
 			decryptedHeader.srcAddress	= (tmpBuf[0] << 24) | (tmpBuf[1] << 16) | (tmpBuf[2] << 8) | tmpBuf[3];
@@ -404,6 +407,12 @@ void FLEX_INT7_IRQHandler() {
 		} else if (WUPER_AESState == WUPER_AES_DECRYPTING_BODY) {
 			uint8_t tmpBuf[16];
 			SpiritAesReadDataOut(tmpBuf, 16);
+
+			uint8_t i;
+			for (i=0; i<16; i++) {
+				tmpBuf[i] ^= WUPER_lastCipher[i];
+			}
+			WUPER_rxBufferGetData(WUPER_lastCipher, WUPER_SFP_rxBufferDecryptPos, 16);
 			WUPER_SFP_rxBufferDecryptPos += 16;
 
 			uint8_t dataWritten = 16;
@@ -756,10 +765,10 @@ tmpCountMarker = tmpCount;
 			// Write data to 16 byte block
 			for (i=0; i<16; i++) {
 				if (remainingData) {
-					tmpBuf[i] = *dataPtr++;
+					tmpBuf[i] ^= *dataPtr++;
 					remainingData--;
 				} else {
-					tmpBuf[i] = 0; // zero-fill padding
+					tmpBuf[i] ^= 0; // zero-fill padding
 				}
 			}
 
