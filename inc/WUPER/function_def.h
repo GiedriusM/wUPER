@@ -91,6 +91,8 @@
 #define WUPER_RF_FID_PING				100
 #define WUPER_RF_FID_PONG				101
 
+#define WUPER_RF_FID_SLEEP				254
+
 /*
  * Function names
  */
@@ -148,5 +150,6 @@
 #define WUPER_RF_FNAME_PWM1SET			"pwm1_set"
 #define WUPER_RF_FNAME_PWM1END			"pwm1_end"
 
+#define WUPER_RF_FNAME_SLEEP			"sleep"
 
 #endif /* FUNCTION_DEF_H_ */

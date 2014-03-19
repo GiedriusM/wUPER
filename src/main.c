@@ -50,30 +50,6 @@ void FLEX_INT6_IRQHandler() {
 	}
 }
 
-SFPResult LedCallback(SFPFunction *msg) {
-	LPC_GPIO->NOT[0] |= BIT7;
-
-	return SFP_OK;
-}
-
-
-SFPResult TestCallback(SFPFunction *msg) {
-	uint8_t txLevel = SpiritRadioGetPALevel(0);
-
-	SFPFunction *outFunc = SFPFunction_new();
-
-	if (outFunc == NULL) return SFP_ERR_ALLOC_FAILED;
-
-	WUPER_SetDestinationAddress(SFPFunction_getArgument_int32(msg, 0));
-
-	SFPFunction_setType(outFunc, SFP_FUNC_TYPE_TEXT);
-	SFPFunction_setName(outFunc, "test");
-	SFPFunction_addArgument_int32(outFunc, txLevel);
-	SFPFunction_send(outFunc, &stream);
-	SFPFunction_delete(outFunc);
-	return SFP_OK;
-}
-
 int main(void) {
 	SystemCoreClockUpdate();
 
@@ -169,7 +145,6 @@ int main(void) {
 	/* System functions */
 	SFPServer_addFunctionHandler(spiritServer, WUPER_RF_FNAME_PING, WUPER_RF_FID_PING, PingReceiveCallback);
 	SFPServer_addFunctionHandler(spiritServer, WUPER_RF_FNAME_PONG, WUPER_RF_FID_PONG, PongReceiveCallback);
-	SFPServer_addFunctionHandler(spiritServer, "led", 0x81, LedCallback);
 
 	SFPServer_setDefaultFunctionHandler(spiritServer, SpiritDefaultCallback);
 
@@ -205,8 +180,6 @@ int main(void) {
 
 		SFPServer_addFunctionHandler(cdcServer, WUPER_CDC_FNAME_GETDEVINFO,	WUPER_CDC_FID_GETDEVINFO, lpc_system_getDeviceInfo);
 
-		SFPServer_addFunctionHandler(cdcServer, "test",	123, TestCallback);
-
 		SFPServer_setDefaultFunctionHandler(cdcServer, CDCDefaultCallback);
 
 		while (System_mode == SYSTEM_MODE_ACTIVE) {
@@ -221,8 +194,7 @@ int main(void) {
 		CDC_Shutdown();
 	}
 
-	SFPServer_addFunctionHandler(spiritServer, "sleep", 0xFE, SleepCallback);
-
+	SFPServer_addFunctionHandler(spiritServer, WUPER_RF_FNAME_SLEEP, WUPER_RF_FID_SLEEP, SleepCallback);
 	while (1) {
 		System_resetPowerSaveTimeout();
 		while (Time_getSystemTime()-System_powerSaveStart < System_powerSaveTimeout) {
