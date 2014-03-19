@@ -34,7 +34,7 @@
 #include "Modules/LPC_ADC.h"
 
 SFPResult lpc_analogRead(SFPFunction *msg) {
-	if (SFPFunction_getArgumentCount(msg) != 0)
+	if (SFPFunction_getArgumentCount(msg) != 2)
 		return SFP_ERR_ARG_COUNT;
 
 	if (SFPFunction_getArgumentType(msg, 0) != SFP_ARG_INT
