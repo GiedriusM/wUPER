@@ -125,8 +125,8 @@ SFPResult GetDeviceAddrCallback(SFPFunction *func) {
 	if (outFunc == NULL) return SFP_ERR_ALLOC_FAILED;
 
 	SFPFunction_setType(outFunc, SFPFunction_getType(func));
-	SFPFunction_setName(outFunc, WUPER_CDC_FNAME_GETDEVINFO);
-	SFPFunction_setID(outFunc, WUPER_CDC_FID_GETDEVINFO);
+	SFPFunction_setName(outFunc, WUPER_CDC_FNAME_GETDEVADDRESS);
+	SFPFunction_setID(outFunc, WUPER_CDC_FID_GETDEVADDRESS);
 	SFPFunction_addArgument_int32(outFunc, WUPER_GetDeviceAddress());
 	SFPFunction_send(outFunc, &stream);
 	SFPFunction_delete(outFunc);
