@@ -93,7 +93,7 @@ SFPResult lpc_spi0_trans(SFPFunction *msg) {
 	}
 
 	while (writeSize || readSize) {
-		while (writeSize && (LPC_SSP0->SR & BIT1)) { // Tx FIFO not full
+		while (writeSize && (LPC_SSP0->SR & BIT1) && (readSize-writeSize) < 8) { // Tx FIFO not full and there's no RX FIFO overflow
 			LPC_SSP0->DR = *data++;
 			writeSize--;
 		}
