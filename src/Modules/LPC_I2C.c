@@ -250,9 +250,9 @@ SFPResult lpc_i2c_trans(SFPFunction *msg) {
 
 	/* Initialize I2C Transfer parameters */
 	I2CHandler.error = 0;
-	I2CHandler.slaveAddress = SFPFunction_getArgument_int32(msg, 0) & 0x7F;
-	I2CHandler.writePtr = SFPFunction_getArgument_barray(msg, 1, &I2CHandler.writeSize);
-	I2CHandler.readSize = SFPFunction_getArgument_int32(msg, 2);
+	I2CHandler.slaveAddress = SFPFunction_getArgument_int32(msg, 1) & 0x7F;
+	I2CHandler.writePtr = SFPFunction_getArgument_barray(msg, 2, &I2CHandler.writeSize);
+	I2CHandler.readSize = SFPFunction_getArgument_int32(msg, 3);
 	I2CHandler.readCount = 0;
 
 	if (I2CHandler.writeSize == 0 && I2CHandler.readSize == 0) return SFP_ERR_ARG_VALUE;
@@ -290,7 +290,7 @@ SFPResult lpc_i2c_trans(SFPFunction *msg) {
 	} else {
 		SFPFunction_addArgument_barray(outFunc, bundleBuf, I2CHandler.readCount);
 	}
-	SFPFunction_send(outFunc, &stream);
+	SFPFunction_send(outFunc, &spirit_stream);
 	SFPFunction_delete(outFunc);
 
 	MemoryManager_free(bundleBuf);
