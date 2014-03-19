@@ -40,7 +40,7 @@ SFPResult lpc_pwm0_begin(SFPFunction *msg) {
 			|| SFPFunction_getArgumentType(msg, 1) != SFP_ARG_INT)
 		return SFP_ERR_ARG_TYPE;
 
-	uint32_t p_cyclePeriod = (SFPFunction_getArgument_int32(msg, 0)-1) & 0xFFFF;	// 16 bit value in microseconds
+	uint32_t p_cyclePeriod = (SFPFunction_getArgument_int32(msg, 1)-1) & 0xFFFF;	// 16 bit value in microseconds
 
 	LPC_SYSCON->SYSAHBCLKCTRL |= BIT7;	// enable clock for CT16B0
 
@@ -105,7 +105,7 @@ SFPResult lpc_pwm1_begin(SFPFunction *msg) {
 
 	if (SFPFunction_getArgumentType(msg, 0) != SFP_ARG_INT) return SFP_ERR_ARG_TYPE;
 
-	uint32_t p_cyclePeriod = SFPFunction_getArgument_int32(msg, 0);	// 32 bit value in microseconds
+	uint32_t p_cyclePeriod = SFPFunction_getArgument_int32(msg, 1);	// 32 bit value in microseconds
 
 	LPC_SYSCON->SYSAHBCLKCTRL |= BIT9;	// enable clock for CT32B0
 
