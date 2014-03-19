@@ -81,7 +81,7 @@ uint32_t System_powerDownTimeout;
 
 #define SYSTEM_INTERRUPT_RESET		1
 #define SYSTEM_INTERRUPT_WAKEUP		5
-#define SYSTEM_INTERRUPT_GPIO		7
+#define SYSTEM_INTERRUPT_GPIO		8
 
 void System_sendInterrupt(uint8_t interruptType, uint32_t param1, uint32_t param2);
 
