@@ -37,12 +37,15 @@
 
 #include "SPIRIT_Config.h"
 
+#include "CRC16.h"
+
 #define WUPER_PROTOCOL_VERSION		'0'
 #define WUPER_MAX_NODE_COUNT		16
 
 #define WUPER_PAYLOAD_OVERHEAD_SIZE		5
 
 #define WUPER_FLAG_DATA		0
+#define WUPER_FLAG_RDATA	(0x80 | WUPER_FLAG_DATA)
 #define WUPER_FLAG_ACK		1
 #define WUPER_FLAG_SETSEQ	2
 #define WUPER_FLAG_SEQERR	3

@@ -154,7 +154,8 @@ volatile uint8_t  tmpStates[32];
 volatile uint32_t tmpCount  = 0;
 volatile uint16_t tmpCountMarker = 0;
 void FLEX_INT7_IRQHandler() {
-	NVIC_DisableIRQ(FLEX_INT7_IRQn);
+	if (!(LPC_GPIO_PIN_INT->IST & BIT7))
+		return;
 
 	SpiritIrqs interrupts = {0};
 	SpiritIrqGetStatus(&interrupts);
@@ -246,11 +247,10 @@ void FLEX_INT7_IRQHandler() {
 		if (WUPER_AESState == WUPER_AES_ENCRYPTING) { // Encrypted data for transmission (not ACK)
 			WUPER_AESState = WUPER_AES_INACTIVE;
 		} else if (WUPER_AESState == WUPER_AES_ENCRYPTING_RESPONSE) {
+			uint8_t responseBuf[16];
+			SpiritAesReadDataOut(responseBuf, 16);
+
 			uint8_t tmpBuf[16];
-			SpiritAesReadDataOut(tmpBuf, 16);
-
-			WUPER_SendResponse(tmpBuf);
-
 			if (WUPER_SFP_rxBufferEncryptedAvailable() > 0) {
 				WUPER_AESState = WUPER_AES_DECRYPTING_BODY;
 				WUPER_rxBufferGetData(tmpBuf, WUPER_SFP_rxBufferDecryptPos, 16);
@@ -259,6 +259,9 @@ void FLEX_INT7_IRQHandler() {
 			} else {
 				WUPER_AESState = WUPER_AES_INACTIVE;
 			}
+
+			WUPER_SendResponse(responseBuf);
+
 		} else if (WUPER_AESState == WUPER_AES_DECRYPTING_HEADER) {
 			uint8_t tmpBuf[16];
 			SpiritAesReadDataOut(tmpBuf, 16);
@@ -287,7 +290,7 @@ void FLEX_INT7_IRQHandler() {
 					&& (((decryptedHeader.dataLength+15) & 0xFFF0) == WUPER_SFP_rxBufferEncryptedAvailable())
 					&& (node != NULL)) {
 
-				if (decryptedHeader.flags == WUPER_FLAG_DATA) { // Data
+				if (decryptedHeader.flags == WUPER_FLAG_DATA || decryptedHeader.flags == WUPER_FLAG_RDATA) { // Data or Repeated Data
 					if (decryptedHeader.sequenceID == node->sequenceID) {
 						node->status = WUPER_NODE_STATUS_CONNECTED;
 
@@ -297,6 +300,26 @@ void FLEX_INT7_IRQHandler() {
 											WUPER_PROTOCOL_VERSION, WUPER_FLAG_ACK, node->sequenceID, node->inSignalIndicator, 0);
 
 						node->sequenceID++;
+					} else if (decryptedHeader.sequenceID == node->sequenceID-1 && decryptedHeader.flags == WUPER_FLAG_RDATA) { // this probably means that remote device missed ACK
+						node->status = WUPER_NODE_STATUS_CONNECTED;
+						WUPER_SFP_rxBufferDecryptPos = WUPER_SFP_rxBufferEncryptedEndPos; // drop current packet
+
+						node->inSignalIndicator = SpiritQiGetRssi();
+
+						WUPER_SetResponsePacket(tmpBuf, WUPER_deviceAddress, decryptedHeader.srcAddress,
+											WUPER_PROTOCOL_VERSION, WUPER_FLAG_ACK, decryptedHeader.sequenceID, node->inSignalIndicator, 0);
+
+					} else if (decryptedHeader.sequenceID == node->sequenceID+1 && WUPER_txState == WUPER_TX_WAITING_ACK) { // this probably means that this device missed ACK
+						node->status = WUPER_NODE_STATUS_CONNECTED;
+						node->sequenceID = decryptedHeader.sequenceID+1;
+
+						WUPER_txState = WUPER_TX_RECEIVED_ACK;
+
+						node->inSignalIndicator = SpiritQiGetRssi();
+
+						WUPER_SetResponsePacket(tmpBuf, WUPER_deviceAddress, decryptedHeader.srcAddress,
+											WUPER_PROTOCOL_VERSION, WUPER_FLAG_ACK, decryptedHeader.sequenceID, node->inSignalIndicator, 0);
+
 					} else {
 						node->status = WUPER_NODE_STATUS_SEQERR;
 						WUPER_SFP_rxBufferDecryptPos = WUPER_SFP_rxBufferEncryptedEndPos;
@@ -318,6 +341,8 @@ void FLEX_INT7_IRQHandler() {
 							&& (decryptedHeader.sequenceID == node->sequenceID)) {
 						node->status = WUPER_NODE_STATUS_CONNECTED;
 						node->outSignalIndicator = decryptedHeader.reserved;
+						node->sequenceID = decryptedHeader.sequenceID+1;
+
 						WUPER_txState = WUPER_TX_RECEIVED_ACK;
 
 #ifdef WUPER_NODE
@@ -434,13 +459,9 @@ void FLEX_INT7_IRQHandler() {
 		}
 	}
 
-	NVIC_EnableIRQ(FLEX_INT7_IRQn);
 }
 
 void WUPER_Init(SFPStream *stream, uint32_t guid[4]) {
-	WUPER_txState = WUPER_TX_INACTIVE;
-	WUPER_AESState = WUPER_AES_INACTIVE;
-
 	WUPER_deviceAddress = guid[0] ^ guid[1] ^ guid[2] ^ guid[3]; // XXX: generate from GUID
 
 	WUPER_SFP_rxBufferWritePos = 0;
@@ -467,8 +488,12 @@ void WUPER_Init(SFPStream *stream, uint32_t guid[4]) {
 }
 
 void WUPER_Restart(void) {
+	WUPER_txState = WUPER_TX_INACTIVE;
+	WUPER_AESState = WUPER_AES_INACTIVE;
+
 	/* Turn shutdown OFF */
 	LPC_GPIO->CLR[1] = (1 << 29);
+	Time_delay(2);
 
 	/* Wait for device to boot up */
 	do {
@@ -513,6 +538,16 @@ void WUPER_Restart(void) {
 	};
 	SpiritGpioInit(&gpioInit);
 
+	/* Enter RX state */
+	SpiritSpiCommandStrobes(COMMAND_LOCKRX); // Lock RX
+	do {
+		SpiritRefreshStatus();
+	} while (g_xStatus.MC_STATE != MC_STATE_LOCK);
+
+	SpiritSpiCommandStrobes(COMMAND_RX); // RX
+	do {
+		SpiritRefreshStatus();
+	} while (g_xStatus.MC_STATE != MC_STATE_RX);
 
 	/* Enable IRQ */
 	LPC_SYSCON->PINTSEL[7] = 0+11;
@@ -525,17 +560,6 @@ void WUPER_Restart(void) {
 	LPC_GPIO_PIN_INT->FALL = (1 << 7);	// Clear falling edge (sort of) flag
 	NVIC_SetPriority(7, 2);
 	NVIC_EnableIRQ(FLEX_INT7_IRQn);
-
-	/* Enter RX state */
-	SpiritSpiCommandStrobes(COMMAND_LOCKRX); // Lock RX
-	do {
-		SpiritRefreshStatus();
-	} while (g_xStatus.MC_STATE != MC_STATE_LOCK);
-
-	SpiritSpiCommandStrobes(COMMAND_RX); // RX
-	do {
-		SpiritRefreshStatus();
-	} while (g_xStatus.MC_STATE != MC_STATE_RX);
 }
 
 void WUPER_Shutdown(void) {
@@ -595,7 +619,7 @@ static void WUPER_InitSPI(void) {
 
 	LPC_SSP1->CR1 = 0;		// Master mode, SPI disabled
 	LPC_SSP1->CPSR = 24;	// 48MHz/24 = 2MHz
-	LPC_SSP1->CR0 = (8-1) | (0 << 4) | (0 << 6) | ((2-1) << 8); // 8bits, SPI mode 0, divider=2
+	LPC_SSP1->CR0 = (8-1) | (0 << 4) | (0 << 6) | ((1-1) << 8); // 8bits, SPI mode 0, divider=2 XXX: spirit does not work with clock < 200kHz???
 	LPC_SSP1->IMSC = 0;		// Interrupts disabled
 	LPC_SSP1->CR1 = BIT1;	// Master mode, SPI enabled
 
@@ -617,8 +641,8 @@ static void WUPER_SPISlaveEnable(void) {
 	LPC_GPIO->CLR[0] = (1 << 20);	// SSEL low
 
 	// CSs to SCLK delay (should be 2us, but less still works)
-	volatile uint32_t i;
-	for(i=0;i<100;i++);
+	volatile uint8_t i=5;
+	while (i--);
 }
 
 static void WUPER_SPISlaveDisable(void) {
@@ -636,6 +660,32 @@ StatusBytes SdkEvalSpiWriteRegisters(uint8_t cRegAddress, uint8_t cNbBytes, uint
 		WUPER_SPITrans(*pcBuffer++);
 	}
 
+/*
+	uint16_t status = 0;
+	LPC_SSP1->DR = 0x00; // Write register
+	LPC_SSP1->DR = cRegAddress; // Address
+
+	uint8_t lStatus = 2;
+	uint16_t lWrite = cNbBytes; // Left over write bytes
+	uint16_t lRead = cNbBytes;  // Left over read bytes
+
+	while (lStatus || lRead || lWrite) {
+		if (lWrite && (LPC_SSP1->SR & BIT1)) { // Bytes to send and TX FIFO not full
+			LPC_SSP1->DR = *pcBuffer++;
+			lWrite--;
+		}
+
+		if ((lRead || lStatus) && (LPC_SSP1->SR & BIT2)) { // Bytes to receive and RX FIFO not empty
+			if (lStatus) {
+				status = (status << 8) | LPC_SSP1->DR;
+				lStatus--;
+			} else {
+				LPC_SSP1->DR;
+				lRead--;
+			}
+		}
+	}
+*/
 	WUPER_SPISlaveDisable();
 
 	return *((StatusBytes*)&status);
@@ -650,6 +700,32 @@ StatusBytes SdkEvalSpiReadRegisters(uint8_t cRegAddress, uint8_t cNbBytes, uint8
 	for (i=0; i<cNbBytes; i++)
 		*pcBuffer++ = WUPER_SPITrans(0xFF);
 
+/*
+	uint16_t status = 0;
+	LPC_SSP1->DR = 0x01; // Read register
+	LPC_SSP1->DR = cRegAddress; // Address
+
+	uint8_t lStatus = 2;
+	uint16_t lWrite = cNbBytes; // Left over write bytes
+	uint16_t lRead = cNbBytes;  // Left over read bytes
+
+	while (lStatus || lRead || lWrite) {
+		if (lWrite && (LPC_SSP1->SR & BIT1)) { // Bytes to send and TX FIFO not full
+			LPC_SSP1->DR = 0xFF;
+			lWrite--;
+		}
+
+		if ((lRead || lStatus) && (LPC_SSP1->SR & BIT2)) { // Bytes to receive and RX FIFO not empty
+			if (lStatus) {
+				status = (status << 8) | LPC_SSP1->DR;
+				lStatus--;
+			} else {
+				*pcBuffer++ = LPC_SSP1->DR;
+				lRead--;
+			}
+		}
+	}
+*/
 	WUPER_SPISlaveDisable();
 
 	return *((StatusBytes*)&status);
@@ -658,6 +734,16 @@ StatusBytes SdkEvalSpiReadRegisters(uint8_t cRegAddress, uint8_t cNbBytes, uint8
 StatusBytes SdkEvalSpiCommandStrobes(uint8_t cCommandCode) {
 	WUPER_SPISlaveEnable();
 	uint16_t status = (WUPER_SPITrans(0x80) << 8) | WUPER_SPITrans(cCommandCode);
+
+/*
+	uint16_t status = 0;
+	LPC_SSP1->DR = 0x80; // Execute command
+	LPC_SSP1->DR = cCommandCode; // Command
+	while (!(LPC_SSP1->SR & BIT2)); // While RX FIFO empty
+	status |= LPC_SSP1->DR << 8;
+	while (!(LPC_SSP1->SR & BIT2)); // While RX FIFO empty
+	status |= LPC_SSP1->DR;
+*/
 	WUPER_SPISlaveDisable();
 
 	return *((StatusBytes*)&status);
@@ -708,10 +794,13 @@ void WUPER_Stream_writePacket(uint8_t *data, uint32_t len) {
 
 	trafficStatistics.packetSendTotal++;
 
-	WUPER_txState = WUPER_TX_SENDING;
-tmpCountMarker = tmpCount;
+	uint16_t packetCRC = CRC16_CCITT(data, len);
+
 	uint8_t retriesLeft = WUPER_settings.sendRetryCount;
 	do {
+		WUPER_txState = WUPER_TX_SENDING; // Stop receiving new packets
+		while (WUPER_AESState != WUPER_AES_INACTIVE); // Make sure all buffered packets are processed
+
 		do {
 			SpiritRefreshStatus();
 			if (g_xStatus.MC_STATE == MC_STATE_RX)
@@ -735,9 +824,11 @@ tmpCountMarker = tmpCount;
 		tmpBuf[6] = node->address >> 8;
 		tmpBuf[7] = node->address;
 		tmpBuf[8] = WUPER_PROTOCOL_VERSION;
-		tmpBuf[9] = WUPER_FLAG_DATA;
+		tmpBuf[9] = (retriesLeft == WUPER_settings.sendRetryCount ? WUPER_FLAG_DATA : WUPER_FLAG_RDATA);
 		tmpBuf[10] = node->sequenceID >> 8;
 		tmpBuf[11] = node->sequenceID;
+		tmpBuf[12] = packetCRC >> 8;
+		tmpBuf[13] = packetCRC;
 		tmpBuf[14] = len >> 8;
 		tmpBuf[15] = len;
 
@@ -813,7 +904,6 @@ tmpCountMarker = tmpCount;
 		}
 
 		if (WUPER_txState == WUPER_TX_RECEIVED_ACK) {
-			node->sequenceID++;
 			trafficStatistics.packetSendSuccess++;
 			break;
 		}
