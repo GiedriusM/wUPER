@@ -68,11 +68,6 @@ int main(void) {
 	LPC_IOCON->PIO0_4 |= 1;	// I2C SCL
 	LPC_IOCON->PIO0_5 |= 1;	// I2C SDA
 
-	/* Temporary and test configs */
-	// XXX: LED config - leave it for now
-	LPC_GPIO->DIR[0] |= BIT7;
-	LPC_GPIO->CLR[0] |= BIT7;
-
 	System_mode = SYSTEM_MODE_ACTIVE;
 
 #ifdef WUPER_NODE
