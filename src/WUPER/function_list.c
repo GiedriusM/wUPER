@@ -383,6 +383,63 @@ SFPResult GetNodeInfoCallback(SFPFunction *func) {
 	return SFP_OK;
 }
 
+SFPResult SetRouterCallback(SFPFunction *func) {
+	if (SFPFunction_getArgumentCount(func) != 1) return SFP_ERR_ARG_COUNT;
+
+	if (SFPFunction_getArgumentType(func, 0) != SFP_ARG_INT) return SFP_ERR_ARG_TYPE;
+
+	uint32_t addr = SFPFunction_getArgument_int32(func, 0);
+
+	WUPER_ClearNodes();
+
+	if (WUPER_AddNode(addr) != WUPER_OK) return SFP_ERR;
+
+	return SFP_OK;
+}
+
+SFPResult GetRouterCallback(SFPFunction *func) {
+	if (SFPFunction_getArgumentCount(func) != 0) return SFP_ERR_ARG_COUNT;
+
+	SFPFunction *outFunc = SFPFunction_new();
+	if (outFunc == NULL) return SFP_ERR_ALLOC_FAILED;
+
+	SFPFunction_setType(outFunc, SFPFunction_getType(func));
+	SFPFunction_setName(outFunc, WUPER_CDC_FNAME_GETROUTER);
+	SFPFunction_setID(outFunc, WUPER_CDC_FID_GETROUTER);
+
+	SFPFunction_addArgument_int32(outFunc, WUPER_GetNodeAddress(0));
+
+	SFPFunction_send(outFunc, &stream);
+	SFPFunction_delete(outFunc);
+
+	return SFP_OK;
+}
+
+SFPResult GetRouterInfoCallback(SFPFunction *func) {
+	if (SFPFunction_getArgumentCount(func) != 0) return SFP_ERR_ARG_COUNT;
+
+	uint32_t addr = WUPER_GetNodeAddress(0);
+
+	uint16_t inSignalQuality, outSignalQuality;
+	WUPER_GetNodeInfo(addr, &inSignalQuality, &outSignalQuality);
+
+	SFPFunction *outFunc = SFPFunction_new();
+	if (outFunc == NULL) return SFP_ERR_ALLOC_FAILED;
+
+	SFPFunction_setType(outFunc, SFPFunction_getType(func));
+	SFPFunction_setName(outFunc, WUPER_CDC_FNAME_GETROUTERINFO);
+	SFPFunction_setID(outFunc, WUPER_CDC_FID_GETROUTERINFO);
+
+	SFPFunction_addArgument_int32(outFunc, addr);
+	SFPFunction_addArgument_int32(outFunc, inSignalQuality);
+	SFPFunction_addArgument_int32(outFunc, outSignalQuality);
+
+	SFPFunction_send(outFunc, &stream);
+	SFPFunction_delete(outFunc);
+
+	return SFP_OK;
+}
+
 SFPResult SaveSettingsCallback(SFPFunction *func) {
 	if (SFPFunction_getArgumentCount(func) != 0) return SFP_ERR_ARG_COUNT;
 

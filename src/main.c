@@ -39,6 +39,7 @@
 #define EEPROM_ADDR_MAGIC		0x0
 #define EEPROM_ADDR_SYSSETTINGS	0x10
 #define EEPROM_ADDR_RFSETTINGS	0x50
+#define EEPROM_ADDR_ROUTER		0xF0
 #define EEPROM_ADDR_NODES		0x100
 
 static volatile uint32_t System_powerSaveStart;
@@ -158,12 +159,6 @@ int main(void) {
 		SFPServer_addFunctionHandler(cdcServer, WUPER_CDC_FNAME_GETRFPARAMS,WUPER_CDC_FID_GETRFPARAMS,	GetRFParamsCallback);
 		SFPServer_addFunctionHandler(cdcServer, WUPER_CDC_FNAME_PING,		WUPER_CDC_FID_PING,			PingSendCallback);
 
-		SFPServer_addFunctionHandler(cdcServer, WUPER_CDC_FNAME_ADDNODE,	WUPER_CDC_FID_ADDNODE,		AddNodeCallback);
-		SFPServer_addFunctionHandler(cdcServer, WUPER_CDC_FNAME_DELNODE,	WUPER_CDC_FID_DELNODE,		DelNodeCallback);
-		SFPServer_addFunctionHandler(cdcServer, WUPER_CDC_FNAME_CLRNODES,	WUPER_CDC_FID_CLRNODES,		ClearNodesCallback);
-		SFPServer_addFunctionHandler(cdcServer, WUPER_CDC_FNAME_GETNODES,	WUPER_CDC_FID_GETNODES,		GetNodesCallback);
-		SFPServer_addFunctionHandler(cdcServer, WUPER_CDC_FNAME_GETNODEINFO,WUPER_CDC_FID_GETNODEINFO,	GetNodeInfoCallback);
-
 		SFPServer_addFunctionHandler(cdcServer, WUPER_CDC_FNAME_SAVESETTINGS, WUPER_CDC_FID_SAVESETTINGS, SaveSettingsCallback);
 
 #ifdef WUPER_NODE
@@ -171,6 +166,16 @@ int main(void) {
 
 		SFPServer_addFunctionHandler(cdcServer, WUPER_CDC_FNAME_SETSYSSETTINGS,	WUPER_CDC_FID_SETSYSSETTINGS, SetSystemSettingsCallback);
 		SFPServer_addFunctionHandler(cdcServer, WUPER_CDC_FNAME_GETSYSSETTINGS,	WUPER_CDC_FID_GETSYSSETTINGS, GetSystemSettingsCallback);
+
+		SFPServer_addFunctionHandler(cdcServer, WUPER_CDC_FNAME_SETROUTER,	WUPER_CDC_FID_SETROUTER,		SetRouterCallback);
+		SFPServer_addFunctionHandler(cdcServer, WUPER_CDC_FNAME_GETROUTER,	WUPER_CDC_FID_GETROUTER,		GetRouterCallback);
+		SFPServer_addFunctionHandler(cdcServer, WUPER_CDC_FNAME_GETROUTERINFO,WUPER_CDC_FID_GETROUTERINFO,	GetRouterInfoCallback);
+#else
+		SFPServer_addFunctionHandler(cdcServer, WUPER_CDC_FNAME_ADDNODE,	WUPER_CDC_FID_ADDNODE,		AddNodeCallback);
+		SFPServer_addFunctionHandler(cdcServer, WUPER_CDC_FNAME_DELNODE,	WUPER_CDC_FID_DELNODE,		DelNodeCallback);
+		SFPServer_addFunctionHandler(cdcServer, WUPER_CDC_FNAME_CLRNODES,	WUPER_CDC_FID_CLRNODES,		ClearNodesCallback);
+		SFPServer_addFunctionHandler(cdcServer, WUPER_CDC_FNAME_GETNODES,	WUPER_CDC_FID_GETNODES,		GetNodesCallback);
+		SFPServer_addFunctionHandler(cdcServer, WUPER_CDC_FNAME_GETNODEINFO,WUPER_CDC_FID_GETNODEINFO,	GetNodeInfoCallback);
 #endif
 
 		SFPServer_addFunctionHandler(cdcServer, WUPER_CDC_FNAME_GETDEVINFO,	WUPER_CDC_FID_GETDEVINFO, lpc_system_getDeviceInfo);
@@ -223,6 +228,12 @@ uint8_t System_loadSettings(void) {
 	IAP_ReadEEPROM(EEPROM_ADDR_RFSETTINGS, (uint8_t*)&wuperSettings, sizeof(WUPERSettings));
 	WUPER_SetSettings(&wuperSettings);
 
+#ifdef WUPER_NODE
+	uint32_t routerAddress;
+	IAP_ReadEEPROM(EEPROM_ADDR_ROUTER, (uint8_t*)&routerAddress, 4);
+	WUPER_ClearNodes();
+	WUPER_AddNode(routerAddress);
+#else
 	// Nodes
 	uint8_t nNodes = 0;
 	IAP_ReadEEPROM(EEPROM_ADDR_NODES, &nNodes, 1);
@@ -234,6 +245,7 @@ uint8_t System_loadSettings(void) {
 		addr += 4;
 		WUPER_AddNode(tmpNodeAddress);
 	}
+#endif
 
 	return 1;
 }
@@ -253,6 +265,10 @@ uint8_t System_saveSettings(void) {
 	WUPER_GetSettings(&wuperSettings);
 	IAP_WriteEEPROM(EEPROM_ADDR_RFSETTINGS, (uint8_t*)&wuperSettings, sizeof(WUPERSettings));
 
+#ifdef WUPER_NODE
+	uint32_t routerAddress = WUPER_GetNodeAddress(0);
+	IAP_WriteEEPROM(EEPROM_ADDR_ROUTER, (uint8_t*)&routerAddress, 4);
+#else
 	// Save nodes
 	uint8_t nNodes = WUPER_GetNodeCount();
 	IAP_WriteEEPROM(EEPROM_ADDR_NODES, &nNodes, 1);
@@ -264,6 +280,7 @@ uint8_t System_saveSettings(void) {
 		IAP_WriteEEPROM(addr, (uint8_t*)&tmpNodeAddress, 4);
 		addr += 4;
 	}
+#endif
 
 
 	// Finally confirm settings by writing magic number

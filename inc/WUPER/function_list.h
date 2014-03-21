@@ -68,6 +68,10 @@ SFPResult ClearNodesCallback(SFPFunction *func);
 SFPResult GetNodesCallback(SFPFunction *func);
 SFPResult GetNodeInfoCallback(SFPFunction *func);
 
+SFPResult SetRouterCallback(SFPFunction *func);
+SFPResult GetRouterCallback(SFPFunction *func);
+SFPResult GetRouterInfoCallback(SFPFunction *func);
+
 SFPResult SaveSettingsCallback(SFPFunction *func);
 SFPResult EnterPowerSaveCallback(SFPFunction *func);
 
